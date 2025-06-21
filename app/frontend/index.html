@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>レシート情報登録</title>
+  <link rel="icon" href="/favicon.ico" type="image/x-icon">
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="header">
+    <h2>🧠レシート情報登録</h2>
+    <div class="record-settings">
+      <label for="recordDuration">入力音声秒数</label>
+      <select id="recordDuration" style="width: 70px;">
+        <option value="5">5</option>
+        <option value="10">10</option>
+        <option value="15" selected>15</option>
+        <option value="20">20</option>
+        <option value="25">25</option>
+        <option value="30">30</option>
+      </select>
+    </div>
+  </div>
+
+  <button onclick="startRecognition()">音声入力開始</button>
+  <div class="recognized-container">
+    <textarea id="recognizedText" placeholder="音声テキストがここに表示されます" rows="2"></textarea>
+    <button type="button" id="clearRecognizedText" onclick="clearRecognizedText()">消去</button>
+  </div>
+
+  <button id="analyzeButton" onclick="onAnalyzeClicked()" disabled style="opacity: 0.5;">上記テキストを各項目に自動振り分け</button>
+
+  <select id="category">
+    <option value="">--勘定科目--</option>
+    <option value="租税公課">租税公課</option>
+    <option value="外注工賃">外注工賃</option>
+    <option value="減価償却費">減価償却費</option>
+    <option value="繰延資産の償却費">繰延資産の償却費</option>
+    <option value="貸倒金">貸倒金</option>
+    <option value="地代家賃">地代家賃</option>
+    <option value="利子割引料">利子割引料</option>
+    <option value="荷造運賃">荷造運賃</option>
+    <option value="水道光熱費">水道光熱費</option>
+    <option value="旅費交通費">旅費交通費</option>
+    <option value="通信費">通信費</option>
+    <option value="広告宣伝費">広告宣伝費</option>
+    <option value="接待交際費">接待交際費</option>
+    <option value="損害保険料">損害保険料</option>
+    <option value="修繕費">修繕費</option>
+    <option value="消耗品費">消耗品費</option>
+    <option value="新聞図書費">新聞図書費</option>
+    <option value="固定資産の損失">固定資産の損失</option>
+    <option value="雑費">雑費</option>
+  </select>
+
+  <input type="date" id="purchaseDate" placeholder="購入日">
+  <input type="text" id="storeName" placeholder="店名">
+  <input type="text" id="itemName" placeholder="品名（例: ボールペン）">
+  <div class="inline-group">
+    <input type="text" id="itemQuantity" placeholder="個数（例: 1）">
+    <select id="itemUnit">
+      <option value="">--単位--</option>
+      <option value="式">式</option>
+      <option value="個">個</option>
+      <option value="人">人</option>
+    </select>
+  </div>
+  <input type="text" id="totalAmount" placeholder="税込み合計金額">
+  <input list="purposeList" id="purpose" placeholder="目的（例: 打ち合わせ）">
+  <datalist id="purposeList">
+    <option value="打ち合わせ">
+    <option value="差入れ">
+    <option value="在庫補充">
+    <option value="ガソリン代として">
+  </datalist>
+
+
+  <div class="cost" id="cost"></div>
+  <button id="saveButton" onclick="saveReceiptData()">レシートデータ登録</button>
+  <p id="latestLabel" style="display: none; font-size: 0.9em; color: #555; margin-bottom: 4px;">
+    最新データ3件
+  </p>
+  <div id="latestReceipts" style="margin-top: 1rem;"></div>
+
+  <a href="/download-csv" download>
+    <button id="downloadButton">レシートデータをCSVでダウンロード</button>
+  </a>
+  <script src="script.js"></script>
+</body>
+</html>
