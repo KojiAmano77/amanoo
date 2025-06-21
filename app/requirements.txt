@@ -1,0 +1,8 @@
+fastapi
+uvicorn[standard]
+python-multipart
+python-dotenv
+openai
+git+https://github.com/openai/whisper.git
+torch==2.0.1+cpu
+--find-links https://download.pytorch.org/whl/torch_stable.html
