@@ -1,6 +1,8 @@
 from fastapi import FastAPI, Request, UploadFile, Form, File
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import HTMLResponse
+from fastapi.templating import Jinja2Templates
 from openai import OpenAI
 from dotenv import load_dotenv
 import os
@@ -181,6 +183,11 @@ async def download_csv():
         return FileResponse(path=file_path, filename="receipts.csv", media_type="text/csv")
     else:
         return JSONResponse(content={"error": "ファイルが存在しません。"}, status_code=404)
+
+templates = Jinja2Templates(directory="frontend")
+@app.get("/map", response_class=HTMLResponse)
+async def show_map(request: Request):
+    return templates.TemplateResponse("map.html", {"request": request})
 
 # ✅ 最後に静的ファイルをマウント（index.html を自動返却）
 frontend_path = os.path.join(os.path.dirname(__file__), "frontend")
