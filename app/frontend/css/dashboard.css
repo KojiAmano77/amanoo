@@ -1,0 +1,365 @@
+* {
+    box-sizing: border-box;
+}
+body {
+    font-family: Arial, sans-serif;
+    margin: 0;
+    padding: 10px;
+    background-color: #f5f5f5;
+    min-height: 100vh;
+}
+.header {
+    background: white;
+    padding: 15px;
+    border-radius: 8px;
+    box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    margin-bottom: 15px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+}
+.header h1 {
+    margin: 0;
+    font-size: 1.4rem;
+    text-align: center;
+}
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+}
+.form-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-bottom: 15px;
+}
+.form-row {
+    display: flex;
+    gap: 10px;
+}
+.form-row > * {
+    flex: 1;
+}
+input, select, textarea, button {
+    padding: 12px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    font-size: 16px;
+    width: 100%;
+}
+.location-display {
+    padding: 12px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    font-size: 16px;
+    width: 100%;
+    background-color: #f8f9fa;
+    color: #666;
+    min-height: 48px;
+    display: flex;
+    align-items: center;
+    cursor: default;
+}
+.location-display.selected {
+    background-color: #e8f5e8;
+    color: #333;
+    border-color: #4CAF50;
+}
+textarea {
+    resize: vertical;
+    min-height: 80px;
+    font-family: inherit;
+}
+button {
+    background-color: #4CAF50;
+    color: white;
+    border: none;
+    cursor: pointer;
+    font-weight: bold;
+    transition: background-color 0.3s;
+}
+button:hover {
+    background-color: #45a049;
+}
+button:active {
+    background-color: #3d8b40;
+}
+.logout-btn {
+    background-color: #f44336;
+    padding: 8px 16px;
+    font-size: 14px;
+}
+.logout-btn:hover {
+    background-color: #da190b;
+}
+.message {
+    padding: 12px;
+    margin: 10px 0;
+    border-radius: 6px;
+    font-weight: bold;
+}
+.success {
+    background-color: #d4edda;
+    color: #155724;
+    border: 1px solid #c3e6cb;
+}
+.error {
+    background-color: #f8d7da;
+    color: #721c24;
+    border: 1px solid #f5c6cb;
+}
+.hidden {
+    display: none;
+}
+.tabs {
+    display: flex;
+    background: white;
+    border-radius: 8px 8px 0 0;
+    overflow: hidden;
+    box-shadow: 0 0 10px rgba(0,0,0,0.1);
+}
+
+.tab {
+    flex: 1;
+    padding: 12px 8px;
+    background: #e9ecef; /* 明るいグレー */
+    color: #333;          /* 黒に近い文字色 */
+    border: none;
+    cursor: pointer;
+    border-bottom: 3px solid transparent;
+    font-size: 13px;
+    text-align: center;
+    transition: background 0.3s, color 0.3s;
+}
+
+.tab:hover {
+    background: #dfe3e6; /* ホバー時に少し濃いグレー */
+}
+
+.tab.active {
+    background: #4CAF50; /* 緑色 */
+    color: white;        /* 白文字でコントラスト */
+    border-bottom-color: #388E3C;
+    font-weight: bold;
+}
+
+.tab-content {
+    background: white;
+    padding: 15px;
+    border-radius: 0 0 8px 8px;
+    box-shadow: 0 0 10px rgba(0,0,0,0.1);
+}
+
+/* 地図用スタイル */
+.map-header {
+    display: flex;
+    align-items: center;
+    margin-bottom: 15px;
+    gap: 15px;
+}
+
+.map-header h2 {
+    margin: 0;
+    flex: 1;
+    min-width: 0;
+}
+
+#map {
+    height: 300px;
+    border-radius: 6px;
+    margin-bottom: 15px;
+}
+
+.current-location-btn {
+    background-color: #FF9800;
+    padding: 8px 12px;
+    font-size: 13px;
+    font-weight: bold;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background-color 0.3s;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    justify-content: center;
+    white-space: nowrap;
+    flex-shrink: 0;
+    width: fit-content;
+    min-width: auto;
+}
+
+.current-location-btn:hover {
+    background-color: #F57C00;
+}
+
+.current-location-btn:disabled {
+    background-color: #ccc;
+    cursor: not-allowed;
+}
+
+.map-toggle-btn {
+    background-color: #2196F3;
+    margin-top: 5px;
+    padding: 8px;
+    font-size: 14px;
+}
+
+.map-toggle-btn:hover {
+    background-color: #1976D2;
+}
+
+/* 活動リスト（モバイル対応） */
+.activities-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 15px;
+    font-size: 14px;
+}
+.activities-table th, .activities-table td {
+    border: 1px solid #ddd;
+    padding: 8px;
+    text-align: left;
+}
+.activities-table th {
+    background-color: #f2f2f2;
+    font-weight: bold;
+}
+.action-buttons {
+    display: flex;
+    gap: 5px;
+    flex-wrap: wrap;
+}
+.edit-btn, .delete-btn, .map-btn {
+    border: none;
+    padding: 6px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    color: white;
+}
+.edit-btn {
+    background-color: #008CBA;
+}
+.delete-btn {
+    background-color: #f44336;
+}
+.map-btn {
+    background-color: #ff9800;
+}
+
+/* 場所表示 */
+.location-text {
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.location-loading {
+    color: #666;
+    font-style: italic;
+}
+.location-error {
+    color: #888;
+    font-size: 12px;
+}
+
+/* モバイル専用リスト */
+.mobile-activity-list {
+    display: none;
+}
+.activity-card {
+    background: #fafafa;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    padding: 12px;
+    margin-bottom: 10px;
+}
+.activity-header {
+    font-weight: bold;
+    color: #333;
+    margin-bottom: 8px;
+}
+.activity-details {
+    font-size: 14px;
+    color: #666;
+    margin-bottom: 8px;
+}
+
+/* タブレット以上 */
+@media (min-width: 768px) {
+    body {
+        padding: 20px;
+    }
+    .header {
+        flex-direction: row;
+        justify-content: space-between;
+        padding: 20px;
+    }
+    .header h1 {
+        font-size: 1.8rem;
+    }
+    .tab-content {
+        padding: 20px;
+    }
+    .form-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 15px;
+    }
+    .form-grid.full {
+        grid-template-columns: 1fr;
+    }
+    .tab {
+        padding: 15px;
+        font-size: 14px;
+    }
+    #map {
+        height: 400px;
+    }
+}
+
+/* デスクトップ */
+@media (min-width: 1024px) {
+    .activities-table {
+        font-size: 16px;
+    }
+    #map {
+        height: 500px;
+    }
+}
+
+/* モバイル専用 - テーブルを縦並びに */
+@media (max-width: 767px) {
+    .activities-table {
+        display: none;
+    }
+    .mobile-activity-list {
+        display: block;
+    }
+    
+    /* モバイルでは地図ヘッダーを縦並びに */
+    .map-header {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 10px;
+    }
+    
+    .map-header h2 {
+        text-align: center;
+        font-size: 1.2rem;
+    }
+    
+    .current-location-btn {
+        align-self: center;
+        width: auto;
+    }
+}
+
+/* デスクトップではモバイルリストを非表示 */
+@media (min-width: 768px) {
+    .mobile-activity-list {
+        display: none;
+    }
+}

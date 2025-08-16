@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>活動記録ダッシュボード</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="/static/css/dashboard.css">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>地域活動記録</h1>
+            <button class="logout-btn" onclick="logout()">ログアウト</button>
+        </div>
+
+        <div class="tabs">
+            <button class="tab active" onclick="switchTab('map-view')">地図</button>
+            <button class="tab" onclick="switchTab('my-activities')">自分の記録</button>
+            <button class="tab" onclick="switchTab('team-activities')">チーム記録</button>
+            <button class="tab" onclick="switchTab('add-activity')">入力フォーム</button>
+        </div>
+
+        <div class="tab-content">
+            <div id="message-area"></div>
+
+            <!-- 地図タブ -->
+            <div id="map-view">
+                <div class="map-header">
+                    <h2>地図をタップして記録作成</h2>
+                    <button id="current-location-btn" class="current-location-btn" onclick="moveToCurrentLocation()">📍 現在地に移動</button>
+                </div>
+                <div id="map"></div>
+                <p style="color: #666; font-size: 14px;">地図上をタップすると、その場所での活動記録を作成できます。</p>
+            </div>
+
+            <!-- 入力フォームタブ -->
+            <div id="add-activity" class="hidden">
+                <h2>活動記録を入力</h2>
+                <form id="activity-form">
+                    <div class="form-grid">
+                        <select id="activity-type" required>
+                            <option value="">活動種別を選択</option>
+                            <option value="辻立ち">辻立ち</option>
+                            <option value="チラシ投函">チラシ投函</option>
+                            <option value="ポスター掲示">ポスター掲示</option>
+                            <option value="その他">その他</option>
+                        </select>
+                        <input type="date" id="activity-date" required>
+                    </div>
+                    <div class="form-grid full">
+                        <div id="location" class="location-display" placeholder="地図で場所を選択してください">地図で場所を選択してください</div>
+                        <button type="button" class="map-toggle-btn" onclick="toggleLocationMap()">地図で場所を選択</button>
+                        <div id="location-map" class="hidden" style="height: 300px; margin-top: 10px; border-radius: 6px;"></div>
+                    </div>
+                    <div class="form-grid full">
+                        <textarea id="memo" placeholder="メモ（任意）"></textarea>
+                    </div>
+                    <button type="submit">記録する</button>
+                </form>
+            </div>
+
+            <!-- 自分の活動記録タブ -->
+            <div id="my-activities" class="hidden">
+                <h2>自分の活動記録</h2>
+                
+                <!-- デスクトップ用テーブル -->
+                <table class="activities-table">
+                    <thead>
+                        <tr>
+                            <th>日付</th>
+                            <th>活動種別</th>
+                            <th>場所</th>
+                            <th>メモ</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="my-activities-tbody">
+                    </tbody>
+                </table>
+
+                <!-- モバイル用リスト -->
+                <div class="mobile-activity-list" id="my-activities-mobile">
+                </div>
+            </div>
+
+            <!-- チーム全体の記録タブ -->
+            <div id="team-activities" class="hidden">
+                <h2>チーム全体の活動記録</h2>
+                
+                <!-- デスクトップ用テーブル -->
+                <table class="activities-table">
+                    <thead>
+                        <tr>
+                            <th>担当者</th>
+                            <th>日付</th>
+                            <th>活動種別</th>
+                            <th>場所</th>
+                            <th>メモ</th>
+                        </tr>
+                    </thead>
+                    <tbody id="team-activities-tbody">
+                    </tbody>
+                </table>
+
+                <!-- モバイル用リスト -->
+                <div class="mobile-activity-list" id="team-activities-mobile">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="/static/js/dashboard.js"></script>
+</body>
+</html>

@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>地域活動記録システム</title>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 15px;
+            background-color: #f5f5f5;
+            min-height: 100vh;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            max-width: 500px;
+            margin: 0 auto;
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 30px;
+            font-size: 1.5rem;
+        }
+        .auth-forms {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        .form-section {
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background-color: #fafafa;
+        }
+        .form-section h2 {
+            margin-top: 0;
+            margin-bottom: 15px;
+            color: #555;
+            font-size: 1.2rem;
+        }
+        input, button, select {
+            width: 100%;
+            padding: 12px;
+            margin: 8px 0;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 16px;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        button:active {
+            background-color: #3d8b40;
+        }
+        .hidden {
+            display: none;
+        }
+        .message {
+            padding: 12px;
+            margin: 10px 0;
+            border-radius: 6px;
+            font-weight: bold;
+        }
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        /* タブレット以上 */
+        @media (min-width: 768px) {
+            .container {
+                max-width: 600px;
+                padding: 30px;
+            }
+            .auth-forms {
+                flex-direction: row;
+                gap: 30px;
+            }
+            .form-section {
+                flex: 1;
+            }
+            h1 {
+                font-size: 2rem;
+            }
+        }
+
+        /* デスクトップ */
+        @media (min-width: 1024px) {
+            .container {
+                max-width: 800px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>地域活動記録システム</h1>
+        
+        <div id="auth-section">
+            <div class="auth-forms">
+                <div class="form-section">
+                    <h2>ログイン</h2>
+                    <form id="login-form">
+                        <input type="text" id="login-username" placeholder="ユーザー名" required>
+                        <input type="password" id="login-password" placeholder="パスワード" required>
+                        <button type="submit">ログイン</button>
+                    </form>
+                </div>
+                
+                <div class="form-section">
+                    <h2>新規登録</h2>
+                    <form id="register-form">
+                        <input type="text" id="register-username" placeholder="ユーザー名" required>
+                        <input type="email" id="register-email" placeholder="メールアドレス" required>
+                        <input type="password" id="register-password" placeholder="パスワード" required>
+                        <button type="submit">新規登録</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+        
+        <div id="message-area"></div>
+    </div>
+
+    <script>
+        let currentToken = localStorage.getItem('access_token');
+        
+        if (currentToken) {
+            window.location.href = '/dashboard';
+        }
+
+        // ログインフォーム
+        document.getElementById('login-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const username = document.getElementById('login-username').value;
+            const password = document.getElementById('login-password').value;
+            
+            const formData = new FormData();
+            formData.append('username', username);
+            formData.append('password', password);
+            
+            try {
+                const response = await fetch('/login', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    localStorage.setItem('access_token', result.access_token);
+                    showMessage('ログインしました', 'success');
+                    setTimeout(() => {
+                        window.location.href = '/dashboard';
+                    }, 1000);
+                } else {
+                    showMessage(result.detail || 'ログインエラー', 'error');
+                }
+            } catch (error) {
+                showMessage('ネットワークエラー', 'error');
+            }
+        });
+
+        // 新規登録フォーム
+        document.getElementById('register-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const username = document.getElementById('register-username').value;
+            const email = document.getElementById('register-email').value;
+            const password = document.getElementById('register-password').value;
+            
+            const formData = new FormData();
+            formData.append('username', username);
+            formData.append('email', email);
+            formData.append('password', password);
+            
+            try {
+                const response = await fetch('/register', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    showMessage('登録完了しました。ログインしてください。', 'success');
+                    document.getElementById('register-form').reset();
+                } else {
+                    showMessage(result.detail || '登録エラー', 'error');
+                }
+            } catch (error) {
+                showMessage('ネットワークエラー', 'error');
+            }
+        });
+
+        function showMessage(message, type) {
+            const messageArea = document.getElementById('message-area');
+            messageArea.innerHTML = `<div class="message ${type}">${message}</div>`;
+            setTimeout(() => {
+                messageArea.innerHTML = '';
+            }, 5000);
+        }
+    </script>
+</body>
+</html>

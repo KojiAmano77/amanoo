@@ -1,34 +1,30 @@
 services:
+  mysql:
+    image: mysql:8.0
+    container_name: team_activity_mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: team_activities
+      MYSQL_USER: app_user
+      MYSQL_PASSWORD: app_password
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+
   fastapi:
       build:
         context: ./app
         dockerfile: Dockerfile
-      container_name: fastapi
+      container_name: team_activity_app
       volumes:
         - ./app:/app
-        - ./data:/data
-      expose:
-        - "8000"
-      env_file:
-      - .env   
-      networks:
-        - appnet
+      ports:
+        - "8000:8000"
+      depends_on:
+        - mysql
+      environment:
+        - DATABASE_URL=mysql+pymysql://app_user:app_password@mysql:3306/team_activities
 
-  nginx:
-    image: nginx:latest
-    container_name: nginx_proxy
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf
-      - /var/www/certbot:/var/www/certbot
-      - /etc/letsencrypt:/etc/letsencrypt:ro  # ← 読み取り専用でマウント
-    depends_on:
-      - fastapi
-    networks:
-      - appnet
-
-networks:
-  appnet:
-    driver: bridge
+volumes:
+  mysql_data:

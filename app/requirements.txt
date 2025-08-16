@@ -1,8 +1,9 @@
 fastapi
 uvicorn[standard]
+jinja2
+sqlalchemy
+pymysql
+passlib[bcrypt]
+python-jose[cryptography]
 python-multipart
 python-dotenv
-openai
-git+https://github.com/openai/whisper.git
-torch==2.0.1+cpu
---find-links https://download.pytorch.org/whl/torch_stable.html
