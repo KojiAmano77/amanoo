@@ -7,24 +7,52 @@ services:
       MYSQL_DATABASE: team_activities
       MYSQL_USER: app_user
       MYSQL_PASSWORD: app_password
-    ports:
-      - "3306:3306"
     volumes:
       - mysql_data:/var/lib/mysql
+    networks:
+      - app-network
 
   fastapi:
-      build:
-        context: ./app
-        dockerfile: Dockerfile
-      container_name: team_activity_app
-      volumes:
-        - ./app:/app
-      ports:
-        - "8000:8000"
-      depends_on:
-        - mysql
-      environment:
-        - DATABASE_URL=mysql+pymysql://app_user:app_password@mysql:3306/team_activities
+    build:
+      context: ./app
+      dockerfile: Dockerfile
+    container_name: team_activity_app
+    volumes:
+      - ./app:/app
+    depends_on:
+      - mysql
+    environment:
+      - DATABASE_URL=mysql+pymysql://app_user:app_password@mysql:3306/team_activities
+    networks:
+      - app-network
+
+  nginx:
+    image: nginx:alpine
+    container_name: team_activity_nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./certbot/conf:/etc/letsencrypt:ro
+      - ./certbot/www:/var/www/certbot:ro
+    depends_on:
+      - fastapi
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  certbot:
+    image: certbot/certbot
+    container_name: team_activity_certbot
+    volumes:
+      - ./certbot/conf:/etc/letsencrypt
+      - ./certbot/www:/var/www/certbot
+    command: certonly --webroot -w /var/www/certbot --force-renewal --email your-email@example.com -d amanoo.f5.si --agree-tos
 
 volumes:
   mysql_data:
+
+networks:
+  app-network:
+    driver: bridge

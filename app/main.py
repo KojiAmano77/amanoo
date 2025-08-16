@@ -3,6 +3,7 @@ from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
 from typing import List
@@ -11,7 +12,24 @@ import os
 from database import get_db, create_tables, User, Activity
 from auth import get_password_hash, verify_password, create_access_token, get_current_user
 
-app = FastAPI()
+app = FastAPI(
+    title="地域活動記録システム",
+    description="チーム活動記録管理システム",
+    version="1.0.0"
+)
+
+# CORS設定
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "https://amanoo.f5.si",
+        "http://localhost:3000",
+        "http://localhost:8000"
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # データベースの初期化
 create_tables()
