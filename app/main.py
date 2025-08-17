@@ -64,6 +64,11 @@ async def register(
     
     return {"message": "正常にユーザー登録されました"}
 
+# ログインページ表示
+@app.get("/login", response_class=HTMLResponse)
+async def login_page(request: Request):
+    return templates.TemplateResponse("index.html", {"request": request})
+
 # ログイン
 @app.post("/login")
 async def login(

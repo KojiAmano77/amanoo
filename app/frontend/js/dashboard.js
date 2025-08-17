@@ -5,11 +5,19 @@ let selectedLat = null, selectedLng = null;
 let activityMarkers = [];
 
 if (!currentToken) {
-    window.location.href = '/';
+    window.location.href = '/login';
 }
 
 // 今日の日付をデフォルトに設定
 document.getElementById('activity-date').valueAsDate = new Date();
+
+// Leafletアイコンのパス設定
+delete L.Icon.Default.prototype._getIconUrl;
+L.Icon.Default.mergeOptions({
+    iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png',
+    iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png',
+    shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
+});
 
 // 地図初期化（東岡崎駅周辺）
 function initMaps() {
@@ -164,7 +172,7 @@ function moveToCurrentLocation() {
                     showMessage('位置情報の取得がタイムアウトしました。ログイン画面に移動します。', 'error');
                     setTimeout(() => {
                         localStorage.removeItem('access_token');
-                        window.location.href = '/';
+                        window.location.href = '/login';
                     }, 2000);
                     return; // ボタンリセット処理をスキップ
             }
@@ -368,7 +376,6 @@ function displayMyActivities(activities) {
             <td class="action-buttons">
                 <button class="edit-btn" onclick="editActivity(${activity.id}, '${activity.activity_type}', '${activity.location}', '${activity.date}', '${activity.memo || ''}', ${activity.latitude || 'null'}, ${activity.longitude || 'null'}, '${activity.location_name || ''}')">編集</button>
                 <button class="delete-btn" onclick="deleteActivity(${activity.id})">削除</button>
-                ${activity.latitude && activity.longitude ? `<button class="map-btn" onclick="showOnMap(${activity.latitude}, ${activity.longitude})">地図</button>` : ''}
             </td>
         `;
 
@@ -382,7 +389,6 @@ function displayMyActivities(activities) {
             <div class="action-buttons">
                 <button class="edit-btn" onclick="editActivity(${activity.id}, '${activity.activity_type}', '${activity.location}', '${activity.date}', '${activity.memo || ''}', ${activity.latitude || 'null'}, ${activity.longitude || 'null'}, '${activity.location_name || ''}')">編集</button>
                 <button class="delete-btn" onclick="deleteActivity(${activity.id})">削除</button>
-                ${activity.latitude && activity.longitude ? `<button class="map-btn" onclick="showOnMap(${activity.latitude}, ${activity.longitude})">地図</button>` : ''}
             </div>
         `;
         mobileList.appendChild(card);
@@ -564,7 +570,7 @@ function createLocationDisplay(lat, lng, originalText, savedLocationName) {
     if (savedLocationName) {
         const locationText = savedLocationName.endsWith('周辺') ? savedLocationName : savedLocationName + '周辺';
         if (lat && lng) {
-            return `<span class="location-text" style="cursor: pointer;" onclick="showOnMap(${lat}, ${lng})" title="クリックで地図表示 (${lat.toFixed(4)}, ${lng.toFixed(4)})">${locationText}</span>`;
+            return `<span class="location-clickable" onclick="showOnMap(${lat}, ${lng})" title="クリックで地図表示 (${lat.toFixed(4)}, ${lng.toFixed(4)})">${locationText}</span>`;
         } else {
             return `<span class="location-text">${locationText}</span>`;
         }
@@ -586,8 +592,7 @@ function createLocationDisplay(lat, lng, originalText, savedLocationName) {
                 const locationName = await getLocationName(lat, lng, originalText);
                 const displayName = locationName + '周辺';
                 element.textContent = displayName;
-                element.className = 'location-text';
-                element.style.cursor = 'pointer';
+                element.className = 'location-clickable';
                 element.onclick = () => showOnMap(lat, lng);
                 element.title = `クリックで地図表示 (${lat.toFixed(4)}, ${lng.toFixed(4)})`;
                 
@@ -596,8 +601,7 @@ function createLocationDisplay(lat, lng, originalText, savedLocationName) {
             } catch (error) {
                 const fallbackName = (originalText || `座標 ${lat.toFixed(4)}, ${lng.toFixed(4)}`) + '周辺';
                 element.textContent = fallbackName;
-                element.className = 'location-text';
-                element.style.cursor = 'pointer';
+                element.className = 'location-clickable';
                 element.onclick = () => showOnMap(lat, lng);
             }
         }
@@ -612,7 +616,7 @@ let currentLocationName = null;
 // ログアウト
 function logout() {
     localStorage.removeItem('access_token');
-    window.location.href = '/';
+    window.location.href = '/login';
 }
 
 // メッセージ表示

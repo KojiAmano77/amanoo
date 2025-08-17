@@ -56,7 +56,7 @@ sleep 10
 echo "3. SSL証明書を取得..."
 docker-compose run --rm certbot certonly --webroot \
     -w /var/www/certbot \
-    --email your-email@example.com \
+    --email koji.amano.g@gmail.com \
     -d amanoo.f5.si \
     --agree-tos \
     --no-eff-email
@@ -79,7 +79,7 @@ chmod +x renew-ssl.sh
 echo "6. 以下のコマンドでcronに自動更新を追加してください:"
 echo "crontab -e"
 echo "# 以下の行を追加:"
-echo "0 12 * * * /path/to/your/project/renew-ssl.sh"
+echo "0 12 * * * /home/koji/fastapi_nginx_project/renew-ssl.sh"
 
 echo "=== セットアップ完了 ==="
 echo "https://amanoo.f5.si/dashboard でアクセスできるはずです"
