@@ -19,6 +19,7 @@ services:
     container_name: team_activity_app
     volumes:
       - ./app:/app
+      - ./.env:/app/.env
     depends_on:
       - mysql
     networks:

@@ -5,12 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>活動記録ダッシュボード</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css" />
     <link rel="stylesheet" href="/static/css/dashboard.css">
 </head>
 <body>
     <div class="container">
         <div class="header">
-            <h1>地域活動記録</h1>
+            <h1>愛知12支部活動記録</h1>
             <button class="logout-btn" onclick="logout()">ログアウト</button>
         </div>
 
@@ -18,7 +19,6 @@
             <button class="tab active" onclick="switchTab('map-view')">地図</button>
             <button class="tab" onclick="switchTab('my-activities')">自分の記録</button>
             <button class="tab" onclick="switchTab('team-activities')">チーム記録</button>
-            <button class="tab" onclick="switchTab('add-activity')">入力フォーム</button>
         </div>
 
         <div class="tab-content">
@@ -27,38 +27,52 @@
             <!-- 地図タブ -->
             <div id="map-view">
                 <div class="map-header">
-                    <h2>地図をタップして記録作成</h2>
+                    <h2>エリアを描画して記録作成</h2>
                     <button id="current-location-btn" class="current-location-btn" onclick="moveToCurrentLocation()">📍 現在地に移動</button>
                 </div>
+                
+                <!-- 地図上部の入力フォーム -->
+                <form id="activity-form">
+                    <div class="form-row keep-horizontal">
+                        <div class="form-field">
+                            <label for="activity-type">活動種別</label>
+                            <select id="activity-type" required>
+                                <option value="">活動種別を選択</option>
+                                <option value="辻立ち">辻立ち</option>
+                                <option value="チラシ投函">チラシ投函</option>
+                                <option value="ポスター掲示">ポスター掲示</option>
+                                <option value="その他">その他</option>
+                            </select>
+                        </div>
+                        <div class="form-field">
+                            <label for="activity-date">日付</label>
+                            <input type="date" id="activity-date" required>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-field">
+                            <label for="location">場所</label>
+                            <div id="location" class="location-display">地図でエリアを描画してください</div>
+                        </div>
+                    </div>
+                </form>
+                
+                <!-- メモ欄と記録ボタンを地図の上に配置 -->
+                <div class="form-row">
+                    <div class="form-field full-width">
+                        <label for="memo">メモ</label>
+                        <input type="text" id="memo" placeholder="メモ（任意）">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <button type="submit" form="activity-form" class="submit-btn">記録する</button>
+                </div>
+                
                 <div id="map"></div>
-                <p style="color: #666; font-size: 14px;">地図上をタップすると、その場所での活動記録を作成できます。</p>
+                
+                <p style="color: #666; font-size: 14px; margin-top: 15px;">地図上でポリゴン（多角形）を描画すると、そのエリアでの活動記録を作成できます。</p>
             </div>
 
-            <!-- 入力フォームタブ -->
-            <div id="add-activity" class="hidden">
-                <h2>活動記録を入力</h2>
-                <form id="activity-form">
-                    <div class="form-grid">
-                        <select id="activity-type" required>
-                            <option value="">活動種別を選択</option>
-                            <option value="辻立ち">辻立ち</option>
-                            <option value="チラシ投函">チラシ投函</option>
-                            <option value="ポスター掲示">ポスター掲示</option>
-                            <option value="その他">その他</option>
-                        </select>
-                        <input type="date" id="activity-date" required>
-                    </div>
-                    <div class="form-grid full">
-                        <div id="location" class="location-display" placeholder="地図で場所を選択してください">地図で場所を選択してください</div>
-                        <button type="button" class="map-toggle-btn" onclick="toggleLocationMap()">地図で場所を選択</button>
-                        <div id="location-map" class="hidden" style="height: 300px; margin-top: 10px; border-radius: 6px;"></div>
-                    </div>
-                    <div class="form-grid full">
-                        <textarea id="memo" placeholder="メモ（任意）"></textarea>
-                    </div>
-                    <button type="submit">記録する</button>
-                </form>
-            </div>
 
             <!-- 自分の活動記録タブ -->
             <div id="my-activities" class="hidden">
@@ -107,10 +121,12 @@
                 <div class="mobile-activity-list" id="team-activities-mobile">
                 </div>
             </div>
+
         </div>
     </div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script src="/static/js/dashboard.js"></script>
+    <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
+    <script src="/static/js/dashboard.js?v=3"></script>
 </body>
 </html>

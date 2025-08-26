@@ -1,15 +1,17 @@
 let currentToken = localStorage.getItem('access_token');
 let editingActivityId = null;
-let map, locationMap;
+let map;
 let selectedLat = null, selectedLng = null;
 let activityMarkers = [];
+let drawnItems;
+let currentPolygon = null;
+let currentPolygonGeoJSON = null;
+let currentUserId = null;
 
 if (!currentToken) {
     window.location.href = '/login';
 }
 
-// 今日の日付をデフォルトに設定
-document.getElementById('activity-date').valueAsDate = new Date();
 
 // Leafletアイコンのパス設定
 delete L.Icon.Default.prototype._getIconUrl;
@@ -21,95 +23,139 @@ L.Icon.Default.mergeOptions({
 
 // 地図初期化（東岡崎駅周辺）
 function initMaps() {
+    console.log('initMaps が開始されました');
+    console.log('L.Draw が利用可能:', typeof L.Draw !== 'undefined');
+    console.log('L.Draw.Event が利用可能:', typeof L.Draw !== 'undefined' && typeof L.Draw.Event !== 'undefined');
     // メイン地図
     map = L.map('map').setView([34.9576, 137.1656], 15);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '© OpenStreetMap contributors'
     }).addTo(map);
 
-    // 地図クリックイベント
-    map.on('click', async function(e) {
-        const lat = e.latlng.lat;
-        const lng = e.latlng.lng;
+    // 描画用レイヤー
+    drawnItems = new L.FeatureGroup();
+    map.addLayer(drawnItems);
+
+    // ポリゴン描画コントロール（ポリゴンのみ）
+    const drawControl = new L.Control.Draw({
+        position: 'topright',
+        draw: {
+            polygon: {
+                allowIntersection: false,
+                drawError: {
+                    color: '#e1e100',
+                    message: '<strong>エラー:</strong> 線が交差しています!'
+                },
+                shapeOptions: {
+                    color: 'blue'
+                }
+            },
+            polyline: false,
+            rectangle: false,
+            circle: false,
+            marker: false,
+            circlemarker: false
+        },
+        edit: false
+    });
+    map.addControl(drawControl);
+
+    // ポリゴン描画完了イベント
+    console.log('L.Draw.Event.CREATED イベントリスナーを設定します');
+    console.log('L.Draw.Event.CREATED の値:', L.Draw.Event.CREATED);
+    
+    // 複数のイベント名を試す
+    map.on(L.Draw.Event.CREATED, function (e) {
+        console.log('L.Draw.Event.CREATED イベントが発火しました:', e);
+        const layer = e.layer;
+        console.log('描画されたレイヤー:', layer);
+        handlePolygonCreated(layer);
+    });
+    
+    // 代替イベント名も試す
+    map.on('draw:created', function (e) {
+        console.log('draw:created イベントが発火しました:', e);
+        const layer = e.layer;
+        console.log('描画されたレイヤー:', layer);
+        handlePolygonCreated(layer);
+    });
+    
+    // ポリゴン作成処理を関数化
+    function handlePolygonCreated(layer) {
+        console.log('handlePolygonCreated が呼ばれました');
         
-        // フォームタブに切り替えて値を設定
-        switchTab('add-activity');
-        document.querySelector('[onclick="switchTab(\'add-activity\')"]').click();
+        // 既存のポリゴンを削除
+        if (currentPolygon) {
+            drawnItems.removeLayer(currentPolygon);
+        }
+        
+        // 新しいポリゴンを追加
+        currentPolygon = layer;
+        drawnItems.addLayer(layer);
+        
+        // ポリゴンのGeoJSONデータを保存
+        currentPolygonGeoJSON = layer.toGeoJSON();
+        console.log('ポリゴンGeoJSONデータ:', currentPolygonGeoJSON);
+        
+        // ポリゴンの中心点を計算
+        const bounds = layer.getBounds();
+        const center = bounds.getCenter();
+        selectedLat = center.lat;
+        selectedLng = center.lng;
+        
+        // デバッグ用ログ
+        console.log('ポリゴン描画完了 - 中心点:', center.lat, center.lng);
+        
+        // フォーカスを活動種別フィールドに移動（未選択の場合）
+        const activityTypeSelect = document.getElementById('activity-type');
+        if (activityTypeSelect && !activityTypeSelect.value) {
+            activityTypeSelect.focus();
+        }
         
         // 住所を取得中の表示
         const locationDisplay = document.getElementById('location');
         locationDisplay.textContent = '住所取得中...';
         locationDisplay.className = 'location-display';
-        selectedLat = lat;
-        selectedLng = lng;
         
         // 非同期で住所を取得
-        try {
-            const locationName = await getLocationName(lat, lng);
-            currentLocationName = locationName;
-            locationDisplay.textContent = locationName + '周辺';
-            locationDisplay.className = 'location-display selected';
-            showMessage('地図上の位置が選択されました。活動記録を入力してください。', 'success');
-        } catch (error) {
-            const fallback = `緯度: ${lat.toFixed(5)}, 経度: ${lng.toFixed(5)}`;
-            locationDisplay.textContent = fallback + '周辺';
-            locationDisplay.className = 'location-display selected';
-            currentLocationName = fallback;
-            showMessage('地図上の位置が選択されました。活動記録を入力してください。', 'success');
-        }
-    });
-
-    // 場所選択用地図
-    locationMap = L.map('location-map').setView([34.9576, 137.1656], 15);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© OpenStreetMap contributors'
-    }).addTo(locationMap);
-
-    let locationMarker = null;
-    locationMap.on('click', async function(e) {
-        const lat = e.latlng.lat;
-        const lng = e.latlng.lng;
-        
-        if (locationMarker) {
-            locationMap.removeLayer(locationMarker);
-        }
-        
-        locationMarker = L.marker([lat, lng]).addTo(locationMap);
-        
-        // 住所取得中
-        const locationDisplay = document.getElementById('location');
-        locationDisplay.textContent = '住所取得中...';
-        locationDisplay.className = 'location-display';
-        selectedLat = lat;
-        selectedLng = lng;
-        
-        // 非同期で住所を取得
-        try {
-            const locationName = await getLocationName(lat, lng);
-            currentLocationName = locationName;
-            locationDisplay.textContent = locationName + '周辺';
-            locationDisplay.className = 'location-display selected';
-        } catch (error) {
-            const fallback = `緯度: ${lat.toFixed(5)}, 経度: ${lng.toFixed(5)}`;
-            locationDisplay.textContent = fallback + '周辺';
-            locationDisplay.className = 'location-display selected';
-            currentLocationName = fallback;
-        }
-    });
-}
-
-// 場所選択地図の表示切替
-function toggleLocationMap() {
-    const mapDiv = document.getElementById('location-map');
-    if (mapDiv.classList.contains('hidden')) {
-        mapDiv.classList.remove('hidden');
-        setTimeout(() => {
-            locationMap.invalidateSize();
-        }, 100);
-    } else {
-        mapDiv.classList.add('hidden');
+        getLocationName(center.lat, center.lng)
+            .then(locationName => {
+                currentLocationName = locationName;
+                locationDisplay.textContent = locationName + 'エリア';
+                locationDisplay.className = 'location-display selected';
+                showMessage('エリアが描画されました。活動記録を入力してください。', 'success');
+            })
+            .catch(error => {
+                const fallback = `緯度: ${center.lat.toFixed(5)}, 経度: ${center.lng.toFixed(5)}`;
+                locationDisplay.textContent = fallback + 'エリア';
+                locationDisplay.className = 'location-display selected';
+                currentLocationName = fallback;
+                showMessage('エリアが描画されました。活動記録を入力してください。', 'success');
+            });
     }
+
+    // ポリゴン編集・削除イベント
+    map.on(L.Draw.Event.EDITED, function (e) {
+        if (currentPolygon) {
+            const bounds = currentPolygon.getBounds();
+            const center = bounds.getCenter();
+            selectedLat = center.lat;
+            selectedLng = center.lng;
+        }
+    });
+
+    map.on(L.Draw.Event.DELETED, function (e) {
+        currentPolygon = null;
+        currentPolygonGeoJSON = null;
+        selectedLat = null;
+        selectedLng = null;
+        const locationDisplay = document.getElementById('location');
+        locationDisplay.textContent = '地図でエリアを描画してください';
+        locationDisplay.className = 'location-display';
+    });
+
 }
+
 
 // 現在地に移動
 function moveToCurrentLocation() {
@@ -191,21 +237,45 @@ function moveToCurrentLocation() {
 
 // タブ切り替え
 function switchTab(tabName) {
-    // すべてのタブコンテンツを非表示
-    document.querySelectorAll('.tab-content > div').forEach(div => {
-        if (div.id !== 'message-area') {
-            div.classList.add('hidden');
-        }
-    });
+    console.log('switchTab called with:', tabName);
     
-    // すべてのタブボタンのアクティブクラスを削除
-    document.querySelectorAll('.tab').forEach(tab => {
-        tab.classList.remove('active');
-    });
+    // 無効なタブ名の場合は何もしない
+    if (!tabName) {
+        console.warn('switchTab: タブ名が指定されていません');
+        return;
+    }
+    
+    try {
+        // すべてのタブコンテンツを非表示
+        document.querySelectorAll('.tab-content > div').forEach(div => {
+            if (div.id !== 'message-area') {
+                div.classList.add('hidden');
+            }
+        });
+        
+        // すべてのタブボタンのアクティブクラスを削除
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.classList.remove('active');
+        });
 
-    // 選択されたタブを表示
-    document.getElementById(tabName).classList.remove('hidden');
-    event.target.classList.add('active');
+        // 選択されたタブを表示
+        const targetTab = document.getElementById(tabName);
+        if (targetTab) {
+            targetTab.classList.remove('hidden');
+        } else {
+            console.warn(`switchTab: タブ '${tabName}' が見つかりません`);
+        }
+        
+        // 対応するタブボタンをアクティブに
+        const targetButton = document.querySelector(`[onclick="switchTab('${tabName}')"]`);
+        if (targetButton) {
+            targetButton.classList.add('active');
+        } else {
+            console.warn(`switchTab: タブボタン '${tabName}' が見つかりません`);
+        }
+    } catch (error) {
+        console.error('switchTab error:', error);
+    }
 
     // 地図サイズ調整
     if (tabName === 'map-view') {
@@ -220,8 +290,60 @@ function switchTab(tabName) {
     }
 }
 
+// 現在のユーザー情報を取得
+async function getCurrentUser() {
+    try {
+        const response = await fetch('/user/me', {
+            headers: {
+                'Authorization': `Bearer ${currentToken}`
+            }
+        });
+        
+        if (response.ok) {
+            const user = await response.json();
+            currentUserId = user.id;
+            return user;
+        }
+    } catch (error) {
+        console.error('ユーザー情報の取得エラー:', error);
+    }
+    return null;
+}
+
+// 地図から活動記録を削除（グローバル関数として定義）
+window.deleteActivityFromMap = async function(activityId) {
+    console.log('deleteActivityFromMap called with ID:', activityId);
+    if (!confirm('この記録を削除しますか？')) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/activities/${activityId}`, {
+            method: 'DELETE',
+            headers: {
+                'Authorization': `Bearer ${currentToken}`
+            }
+        });
+        
+        if (response.ok) {
+            showMessage('記録を削除しました', 'success');
+            loadActivitiesOnMap();
+            loadMyActivities();
+        } else {
+            showMessage('削除に失敗しました', 'error');
+        }
+    } catch (error) {
+        showMessage('ネットワークエラー', 'error');
+    }
+};
+
 // 地図上に活動記録を表示
 async function loadActivitiesOnMap() {
+    // 現在のユーザー情報を取得（まだ取得していない場合）
+    if (!currentUserId) {
+        await getCurrentUser();
+    }
+    
     // 既存のマーカーを削除
     activityMarkers.forEach(marker => {
         map.removeLayer(marker);
@@ -239,7 +361,60 @@ async function loadActivitiesOnMap() {
             const activities = await response.json();
             
             activities.forEach(activity => {
-                if (activity.latitude && activity.longitude) {
+                console.log(`活動記録 ${activity.id}: polygon_coordinates = ${activity.polygon_coordinates ? '有り' : '無し'}`);
+                if (activity.polygon_coordinates) {
+                    console.log('ポリゴンデータ内容:', activity.polygon_coordinates);
+                }
+                
+                // ポリゴンデータがある場合はポリゴンを表示
+                if (activity.polygon_coordinates) {
+                    try {
+                        const geoJSON = JSON.parse(activity.polygon_coordinates);
+                        const deleteButton = currentUserId === activity.user_id 
+                            ? `<br><button onclick="window.deleteActivityFromMap(${activity.id})" class="delete-btn" style="background-color: #dc3545; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 12px;">🗑️ 削除</button>`
+                            : '';
+                        
+                        const polygon = L.geoJSON(geoJSON, {
+                            style: {
+                                color: 'blue',
+                                weight: 2,
+                                opacity: 0.8,
+                                fillOpacity: 0.3
+                            }
+                        }).addTo(map).bindPopup(`
+                            <b>${activity.activity_type}</b><br>
+                            担当: ${activity.username}<br>
+                            日付: ${new Date(activity.date).toLocaleDateString('ja-JP')}<br>
+                            場所: ${activity.location}<br>
+                            ${activity.memo ? `メモ: ${activity.memo}` : ''}${deleteButton}
+                        `);
+                        activityMarkers.push(polygon);
+                    } catch (e) {
+                        console.error('ポリゴンデータの解析エラー:', e);
+                        // フォールバック: マーカー表示
+                        if (activity.latitude && activity.longitude) {
+                            const deleteButton = currentUserId === activity.user_id 
+                                ? `<br><button onclick="window.deleteActivityFromMap(${activity.id})" class="delete-btn" style="background-color: #dc3545; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 12px;">🗑️ 削除</button>`
+                                : '';
+                            
+                            const marker = L.marker([activity.latitude, activity.longitude])
+                                .addTo(map)
+                                .bindPopup(`
+                                    <b>${activity.activity_type}</b><br>
+                                    担当: ${activity.username}<br>
+                                    日付: ${new Date(activity.date).toLocaleDateString('ja-JP')}<br>
+                                    場所: ${activity.location}<br>
+                                    ${activity.memo ? `メモ: ${activity.memo}` : ''}${deleteButton}
+                                `);
+                            activityMarkers.push(marker);
+                        }
+                    }
+                } else if (activity.latitude && activity.longitude) {
+                    // ポリゴンデータがない場合は従来通りマーカー表示
+                    const deleteButton = currentUserId === activity.user_id 
+                        ? `<br><button onclick="window.deleteActivityFromMap(${activity.id})" class="delete-btn" style="background-color: #dc3545; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 12px;">🗑️ 削除</button>`
+                        : '';
+                    
                     const marker = L.marker([activity.latitude, activity.longitude])
                         .addTo(map)
                         .bindPopup(`
@@ -247,7 +422,7 @@ async function loadActivitiesOnMap() {
                             担当: ${activity.username}<br>
                             日付: ${new Date(activity.date).toLocaleDateString('ja-JP')}<br>
                             場所: ${activity.location}<br>
-                            ${activity.memo ? `メモ: ${activity.memo}` : ''}
+                            ${activity.memo ? `メモ: ${activity.memo}` : ''}${deleteButton}
                         `);
                     activityMarkers.push(marker);
                 }
@@ -258,62 +433,79 @@ async function loadActivitiesOnMap() {
     }
 }
 
-// 活動記録追加フォーム
-document.getElementById('activity-form').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    
-    const formData = new FormData();
-    formData.append('activity_type', document.getElementById('activity-type').value);
-    formData.append('location', document.getElementById('location').textContent);
-    formData.append('date', document.getElementById('activity-date').value);
-    formData.append('memo', document.getElementById('memo').value);
-    
-    if (selectedLat && selectedLng) {
-        formData.append('latitude', selectedLat);
-        formData.append('longitude', selectedLng);
-    }
-    
-    // 取得済みの場所名があれば送信
-    if (currentLocationName) {
-        formData.append('location_name', currentLocationName);
-    }
-    
-    try {
-        const url = editingActivityId ? `/activities/${editingActivityId}` : '/activities';
-        const method = editingActivityId ? 'PUT' : 'POST';
-        
-        const response = await fetch(url, {
-            method: method,
-            headers: {
-                'Authorization': `Bearer ${currentToken}`
-            },
-            body: formData
+// 活動記録フォーム送信処理（DOMContentLoaded内で設定される）
+function setupActivityForm() {
+    const activityForm = document.getElementById('activity-form');
+    if (activityForm) {
+        activityForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            console.log('=== フォーム送信開始 ===');
+            console.log('currentPolygon:', currentPolygon);
+            console.log('currentPolygonGeoJSON:', currentPolygonGeoJSON);
+            
+            const formData = new FormData();
+            formData.append('activity_type', document.getElementById('activity-type').value);
+            formData.append('location', document.getElementById('location').textContent);
+            formData.append('date', document.getElementById('activity-date').value);
+            formData.append('memo', document.getElementById('memo').value);
+            
+            if (selectedLat && selectedLng) {
+                formData.append('latitude', selectedLat);
+                formData.append('longitude', selectedLng);
+            }
+            
+            // ポリゴンデータを送信
+            console.log('フォーム送信時のcurrentPolygonGeoJSON:', currentPolygonGeoJSON);
+            if (currentPolygonGeoJSON) {
+                formData.append('polygon_coordinates', JSON.stringify(currentPolygonGeoJSON));
+                console.log('ポリゴンデータを送信:', currentPolygonGeoJSON);
+            } else {
+                console.log('ポリゴンデータがありません');
+            }
+            
+            // 取得済みの場所名があれば送信
+            if (currentLocationName) {
+                formData.append('location_name', currentLocationName);
+            }
+            
+            try {
+                const url = editingActivityId ? `/activities/${editingActivityId}` : '/activities';
+                const method = editingActivityId ? 'PUT' : 'POST';
+                
+                const response = await fetch(url, {
+                    method: method,
+                    headers: {
+                        'Authorization': `Bearer ${currentToken}`
+                    },
+                    body: formData
+                });
+                
+                if (response.ok) {
+                    showMessage(editingActivityId ? '記録を更新しました' : '記録を追加しました', 'success');
+                    document.getElementById('activity-form').reset();
+                    document.getElementById('activity-date').valueAsDate = new Date();
+                    
+                    // 場所表示をリセット
+                    const locationDisplay = document.getElementById('location');
+                    locationDisplay.textContent = '地図でエリアを描画してください';
+                    locationDisplay.className = 'location-display';
+                    editingActivityId = null;
+                    selectedLat = selectedLng = null;
+                    currentLocationName = null;
+                    currentPolygonGeoJSON = null;
+                    loadMyActivities();
+                    loadActivitiesOnMap();
+                } else {
+                    const result = await response.json();
+                    showMessage(result.detail || 'エラーが発生しました', 'error');
+                }
+            } catch (error) {
+                showMessage('ネットワークエラー', 'error');
+            }
         });
-        
-        if (response.ok) {
-            showMessage(editingActivityId ? '記録を更新しました' : '記録を追加しました', 'success');
-            document.getElementById('activity-form').reset();
-            document.getElementById('activity-date').valueAsDate = new Date();
-            
-            // 場所表示をリセット
-            const locationDisplay = document.getElementById('location');
-            locationDisplay.textContent = '地図で場所を選択してください';
-            locationDisplay.className = 'location-display';
-            
-            document.getElementById('location-map').classList.add('hidden');
-            editingActivityId = null;
-            selectedLat = selectedLng = null;
-            currentLocationName = null;
-            loadMyActivities();
-            loadActivitiesOnMap();
-        } else {
-            const result = await response.json();
-            showMessage(result.detail || 'エラーが発生しました', 'error');
-        }
-    } catch (error) {
-        showMessage('ネットワークエラー', 'error');
     }
-});
+}
 
 // 自分の活動記録を読み込み
 async function loadMyActivities() {
@@ -451,8 +643,7 @@ function editActivity(id, activityType, location, date, memo, latitude, longitud
         currentLocationName = null;
     }
     
-    switchTab('add-activity');
-    document.querySelector('[onclick="switchTab(\'add-activity\')"]').click();
+    switchTab('map-view');
 }
 
 // 活動記録削除
@@ -484,7 +675,6 @@ async function deleteActivity(id) {
 // 地図で場所を表示
 function showOnMap(lat, lng) {
     switchTab('map-view');
-    document.querySelector('[onclick="switchTab(\'map-view\')"]').click();
     
     setTimeout(() => {
         map.setView([lat, lng], 17);
@@ -625,11 +815,21 @@ function showMessage(message, type) {
     messageArea.innerHTML = `<div class="message ${type}">${message}</div>`;
     setTimeout(() => {
         messageArea.innerHTML = '';
-    }, 5000);
+    }, 1000);
 }
+
 
 // 初期化
 document.addEventListener('DOMContentLoaded', function() {
+    // 今日の日付をデフォルトに設定
+    const activityDateInput = document.getElementById('activity-date');
+    if (activityDateInput) {
+        activityDateInput.valueAsDate = new Date();
+    }
+    
+    // フォームのイベントリスナーを設定
+    setupActivityForm();
+    
     initMaps();
     loadMyActivities();
     // 地図上に既存の活動記録アイコンを表示

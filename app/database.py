@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 # Load environment variables from .env file
 load_dotenv()
 
-DATABASE_URL = os.getenv("DATABASE_URL", "mysql+pymysql://app_user:app_password@localhost:3306/team_activities")
+DATABASE_URL = os.getenv("DATABASE_URL", "mysql+pymysql://app_user:app_password@mysql:3306/team_activities")
 
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -35,13 +35,15 @@ class Activity(Base):
     activity_type = Column(String(50), nullable=False)  # ポスター掲示、チラシ投函、辻立ち等
     location = Column(String(255), nullable=False)      # 場所
     location_name = Column(String(255))                 # 逆ジオコーディングで取得した場所名
-    latitude = Column(Float)                            # 緯度
-    longitude = Column(Float)                           # 経度
+    latitude = Column(Float)                            # 緯度（中心点またはポイント）
+    longitude = Column(Float)                           # 経度（中心点またはポイント）
+    polygon_coordinates = Column(Text)                  # GeoJSON形式のポリゴン座標データ
     date = Column(DateTime, nullable=False)             # 実施日
     memo = Column(Text)                                 # メモ
     created_at = Column(DateTime, default=datetime.utcnow)
     
     user = relationship("User", back_populates="activities")
+
 
 def get_db():
     db = SessionLocal()

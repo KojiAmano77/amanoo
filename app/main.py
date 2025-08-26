@@ -13,7 +13,7 @@ from database import get_db, create_tables, User, Activity
 from auth import get_password_hash, verify_password, create_access_token, get_current_user
 
 app = FastAPI(
-    title="地域活動記録システム",
+    title="愛知12支部活動記録システム",
     description="チーム活動記録管理システム",
     version="1.0.0"
 )
@@ -99,10 +99,16 @@ async def create_activity(
     latitude: float = Form(None),
     longitude: float = Form(None),
     location_name: str = Form(None),
+    polygon_coordinates: str = Form(None),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     activity_date = datetime.fromisoformat(date)
+    
+    # デバッグ用ログ
+    print(f"受信したpolygon_coordinates: {polygon_coordinates}")
+    print(f"polygon_coordinatesの型: {type(polygon_coordinates)}")
+    
     db_activity = Activity(
         user_id=current_user.id,
         activity_type=activity_type,
@@ -110,6 +116,7 @@ async def create_activity(
         location_name=location_name,
         latitude=latitude,
         longitude=longitude,
+        polygon_coordinates=polygon_coordinates,
         date=activity_date,
         memo=memo
     )
@@ -125,7 +132,32 @@ async def get_activities(
     db: Session = Depends(get_db)
 ):
     activities = db.query(Activity).filter(Activity.user_id == current_user.id).all()
-    return activities
+    
+    # ポリゴンデータ含め、すべてのフィールドを返す
+    return [
+        {
+            "id": activity.id,
+            "activity_type": activity.activity_type,
+            "location": activity.location,
+            "location_name": activity.location_name,
+            "latitude": activity.latitude,
+            "longitude": activity.longitude,
+            "polygon_coordinates": activity.polygon_coordinates,
+            "date": activity.date.isoformat(),
+            "memo": activity.memo,
+            "created_at": activity.created_at.isoformat()
+        }
+        for activity in activities
+    ]
+
+# 現在のユーザー情報取得
+@app.get("/user/me")
+async def get_current_user_info(current_user: User = Depends(get_current_user)):
+    return {
+        "id": current_user.id,
+        "username": current_user.username,
+        "email": current_user.email
+    }
 
 # すべての活動記録を取得（チーム全体）
 @app.get("/activities/all")
@@ -137,12 +169,14 @@ async def get_all_activities(
     return [
         {
             "id": activity.id,
+            "user_id": activity.user_id,
             "username": activity.user.username,
             "activity_type": activity.activity_type,
             "location": activity.location,
             "location_name": activity.location_name,
             "latitude": activity.latitude,
             "longitude": activity.longitude,
+            "polygon_coordinates": activity.polygon_coordinates,
             "date": activity.date.isoformat(),
             "memo": activity.memo,
             "created_at": activity.created_at.isoformat()
@@ -161,6 +195,7 @@ async def update_activity(
     latitude: float = Form(None),
     longitude: float = Form(None),
     location_name: str = Form(None),
+    polygon_coordinates: str = Form(None),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -177,6 +212,7 @@ async def update_activity(
     activity.location_name = location_name
     activity.latitude = latitude
     activity.longitude = longitude
+    activity.polygon_coordinates = polygon_coordinates
     activity.date = datetime.fromisoformat(date)
     activity.memo = memo
     db.commit()
@@ -200,6 +236,7 @@ async def delete_activity(
     db.delete(activity)
     db.commit()
     return {"message": "Activity deleted successfully"}
+
 
 # メインページ
 @app.get("/", response_class=HTMLResponse)
