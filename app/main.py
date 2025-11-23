@@ -17,7 +17,7 @@ from email_service import send_password_reset_email, send_password_changed_email
 
 app = FastAPI(
     title="愛知第12支部活動記録システム",
-    description="チーム活動記録管理システム",
+    description="支部活動記録管理システム",
     version="1.0.0"
 )
 
@@ -250,7 +250,7 @@ async def get_current_user_info(current_user: User = Depends(get_current_user)):
         "email": current_user.email
     }
 
-# すべての活動記録を取得（チーム全体）
+# すべての活動記録を取得（支部全体）
 @app.get("/activities/all")
 async def get_all_activities(
     current_user: User = Depends(get_current_user),

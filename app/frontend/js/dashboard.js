@@ -613,7 +613,7 @@ async function loadMyActivities() {
     }
 }
 
-// チーム全体の活動記録を読み込み
+// 支部全体の活動記録を読み込み
 async function loadTeamActivities() {
     try {
         const response = await fetch('/activities/all', {
@@ -705,7 +705,7 @@ function displayMyActivities(activities) {
     });
 }
 
-// チーム全体の活動記録表示
+// 支部全体の活動記録表示
 function displayTeamActivities(activities) {
     const tbody = document.getElementById('team-activities-tbody');
     const mobileList = document.getElementById('team-activities-mobile');

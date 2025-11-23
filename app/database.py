@@ -32,7 +32,7 @@ class Activity(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    activity_type = Column(String(50), nullable=False)  # ポスター掲示、チラシ投函、辻立ち等
+    activity_type = Column(String(50), nullable=False)  # ポスター掲示、ポスティング、辻立ち等
     location = Column(String(255), nullable=False)      # 場所
     location_name = Column(String(255))                 # 逆ジオコーディングで取得した場所名
     latitude = Column(Float)                            # 緯度（中心点またはポイント）

@@ -35,7 +35,7 @@
         <div class="tabs">
             <button class="tab active" onclick="switchTab('map-view')">地図</button>
             <button class="tab" onclick="switchTab('my-activities')">自分の記録</button>
-            <button class="tab" onclick="switchTab('team-activities')">チーム記録</button>
+            <button class="tab" onclick="switchTab('team-activities')">支部記録</button>
         </div>
 
         <div class="tab-content">
@@ -55,7 +55,7 @@
                             <select id="activity-type" required>
                                 <option value="">活動種別を選択</option>
                                 <option value="辻立ち">辻立ち</option>
-                                <option value="チラシ投函">チラシ投函</option>
+                                <option value="ポスティング">ポスティング</option>
                                 <option value="ポスター掲示">ポスター掲示</option>
                                 <option value="その他">その他</option>
                             </select>
@@ -108,7 +108,7 @@
             </div>
 
             <div id="team-activities" class="hidden">
-                <h2>チーム全体の活動記録</h2>
+                <h2>支部全体の活動記録</h2>
                 
                 <table class="activities-table">
                     <thead>
