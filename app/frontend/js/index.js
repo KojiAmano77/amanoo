@@ -69,6 +69,61 @@ document.getElementById('register-form').addEventListener('submit', async (e) =>
     }
 });
 
+// パスワードリセット要求フォーム
+document.getElementById('reset-request-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const email = document.getElementById('reset-email').value;
+    
+    const formData = new FormData();
+    formData.append('email', email);
+    
+    try {
+        const response = await fetch('/request-password-reset', {
+            method: 'POST',
+            body: formData
+        });
+        
+        const result = await response.json();
+        
+        if (response.ok) {
+            showMessage(result.message, 'success');
+            document.getElementById('reset-request-form').reset();
+        } else {
+            showMessage(result.detail || 'リセット要求エラー', 'error');
+        }
+    } catch (error) {
+        showMessage('ネットワークエラー', 'error');
+    }
+});
+
+// DOMが読み込まれてからイベントリスナーを設定
+document.addEventListener('DOMContentLoaded', function() {
+    // パスワードを忘れた場合のリンク
+    const forgotPasswordLink = document.getElementById('forgot-password-link');
+    if (forgotPasswordLink) {
+        forgotPasswordLink.addEventListener('click', (e) => {
+            e.preventDefault();
+            console.log('パスワードリセットリンクがクリックされました');
+            document.getElementById('login-form').parentElement.style.display = 'none';
+            document.getElementById('register-form').parentElement.style.display = 'none';
+            document.getElementById('reset-form-section').style.display = 'block';
+        });
+    }
+
+    // ログインに戻るリンク
+    const backToLoginLink = document.getElementById('back-to-login-link');
+    if (backToLoginLink) {
+        backToLoginLink.addEventListener('click', (e) => {
+            e.preventDefault();
+            console.log('ログインに戻るリンクがクリックされました');
+            document.getElementById('reset-form-section').style.display = 'none';
+            document.getElementById('login-form').parentElement.style.display = 'block';
+            document.getElementById('register-form').parentElement.style.display = 'block';
+        });
+    }
+});
+
 function showMessage(message, type) {
     const messageArea = document.getElementById('message-area');
     messageArea.innerHTML = `<div class="message ${type}">${message}</div>`;

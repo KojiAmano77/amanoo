@@ -47,9 +47,9 @@ function initMaps() {
                     message: '<strong>エラー:</strong> 線が交差しています!'
                 },
                 shapeOptions: {
-                    color: '#FF4500',        // よりビビッドなオレンジレッドの境界線
-                    fillColor: '#FF6B35',    // 鮮やかなオレンジの塗りつぶし
-                    fillOpacity: 0.4         // 透過度40%（少し濃く）
+                    color: '#4A1A4A',        // 境界線：非常に濃い紫
+                    fillColor: '#663399',    // 塗りつぶし：濃い紫
+                    fillOpacity: 0.5         // 透過度50%（コントラスト強化）
                 }
             },
             polyline: false,
@@ -400,11 +400,11 @@ async function loadActivitiesOnMap() {
                         
                         const polygon = L.geoJSON(geoJSON, {
                             style: {
-                                color: '#FF4500',           // よりビビッドなオレンジレッドの境界線
-                                fillColor: '#FF6B35',       // 鮮やかなオレンジの塗りつぶし
+                                color: '#4A1A4A',           // 境界線：非常に濃い紫
+                                fillColor: '#663399',       // 塗りつぶし：濃い紫
                                 weight: 2,
                                 opacity: 0.9,
-                                fillOpacity: 0.4
+                                fillOpacity: 0.5
                             }
                         }).addTo(map).bindPopup(`
                             <b>${activity.activity_type}</b><br>
@@ -792,9 +792,9 @@ async function editActivity(id, activityType, location, date, memo, latitude, lo
                 
                 // Leaflet Polygonレイヤーを作成（これによりDrawツールで編集可能になる）
                 const polygon = L.polygon(latLngs, {
-                    color: '#FF4500',
-                    fillColor: '#FF6B35',
-                    fillOpacity: 0.4,
+                    color: '#4A1A4A',
+                    fillColor: '#663399',
+                    fillOpacity: 0.5,
                     weight: 2,
                     opacity: 0.9
                 });

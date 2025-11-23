@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, Column, Integer, String, DateTime, Text, ForeignKey, Float
+from sqlalchemy import create_engine, Column, Integer, String, DateTime, Text, ForeignKey, Float, Boolean
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 from datetime import datetime
@@ -43,6 +43,18 @@ class Activity(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     
     user = relationship("User", back_populates="activities")
+
+class PasswordResetToken(Base):
+    __tablename__ = "password_reset_tokens"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    token = Column(String(255), unique=True, index=True, nullable=False)
+    expires_at = Column(DateTime, nullable=False)
+    used = Column(Boolean, default=False, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    user = relationship("User")
 
 
 def get_db():

@@ -476,6 +476,22 @@ button:active {
         font-size: 12px;
     }
     
+    /* スマホ画面での地図サイズを横:縦=1:2に調整 */
+    #map {
+        height: 60vh; /* ビューポートの60%の高さ */
+        min-height: 500px; /* 最小高さ500px */
+        max-height: 700px; /* 最大高さ700px */
+        width: 100%;
+    }
+    
+    /* さらに小さいスマホ画面の場合 */
+    @media (max-width: 480px) {
+        #map {
+            height: 65vh; /* より大きな比率 */
+            min-height: 520px;
+        }
+    }
+    
     /* 期間指定UIのモバイル対応 */
     .date-filter-content {
         gap: 8px;
