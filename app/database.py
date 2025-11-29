@@ -26,6 +26,7 @@ class User(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     
     activities = relationship("Activity", back_populates="user")
+    events = relationship("Event", back_populates="user")
 
 class Activity(Base):
     __tablename__ = "activities"
@@ -43,6 +44,20 @@ class Activity(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     
     user = relationship("User", back_populates="activities")
+
+class Event(Base):
+    __tablename__ = "events"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    title = Column(String(100), nullable=False)
+    start = Column(DateTime, nullable=False)
+    end = Column(DateTime, nullable=True)
+    description = Column(Text, nullable=True)
+    adjust_url = Column(String(255), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    user = relationship("User", back_populates="events")
 
 class PasswordResetToken(Base):
     __tablename__ = "password_reset_tokens"

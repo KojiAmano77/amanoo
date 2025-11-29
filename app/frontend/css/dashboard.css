@@ -16,7 +16,6 @@ body {
     margin-bottom: 15px;
     display: flex;
     flex-direction: row;
-    justify-content: space-between;
     align-items: center;
     gap: 10px;
 }
@@ -24,7 +23,17 @@ body {
     margin: 0;
     font-size: 1.4rem;
     text-align: left;
-    flex: 1;
+}
+
+#calendar-link {
+    font-size: 1.5rem;
+    color: #FF8C00; /* オレンジ色に変更 */
+    text-decoration: none;
+    margin-left: 20px;
+}
+
+#calendar-link:hover {
+    color: #007bff;
 }
 .container {
     max-width: 1200px;
@@ -141,6 +150,7 @@ button:active {
     font-size: 10px;
     width: auto;
     flex-shrink: 0;
+    margin-left: auto;
 }
 .logout-btn:hover {
     background-color: #da190b;

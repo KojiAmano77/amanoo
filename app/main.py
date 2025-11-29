@@ -6,14 +6,33 @@ from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
-from typing import List
+from typing import List, Optional
+from pydantic import BaseModel, Field
 import os
 import secrets
 import uuid
 
-from database import get_db, create_tables, User, Activity, PasswordResetToken
+from database import get_db, create_tables, User, Activity, PasswordResetToken, Event
 from auth import get_password_hash, verify_password, create_access_token, get_current_user
 from email_service import send_password_reset_email, send_password_changed_email
+
+# Pydantic models for Calendar Events
+class EventBase(BaseModel):
+    title: str
+    start: datetime
+    end: Optional[datetime] = None
+    description: Optional[str] = None
+    adjust_url: Optional[str] = None
+
+class EventCreate(EventBase):
+    pass
+
+class EventSchema(EventBase):
+    id: int
+    user_id: int
+
+    class Config:
+        from_attributes = True
 
 app = FastAPI(
     title="愛知第12支部活動記録システム",
@@ -91,7 +110,7 @@ async def login(
             detail="ユーザー名またはパスワードが正しくありません"
         )
     
-    access_token_expires = timedelta(minutes=30)
+    access_token_expires = timedelta(hours=12)
     access_token = create_access_token(
         data={"sub": user.username}, expires_delta=access_token_expires
     )
@@ -337,6 +356,74 @@ async def root(request: Request):
 @app.get("/dashboard", response_class=HTMLResponse)
 async def dashboard(request: Request):
     return templates.TemplateResponse("dashboard.html", {"request": request})
+
+@app.get("/calendar.html", response_class=HTMLResponse)
+async def calendar_page(request: Request):
+    return templates.TemplateResponse("calendar.html", {"request": request})
+
+# --- Calendar Event Endpoints ---
+@app.get("/events", response_model=List[EventSchema])
+async def get_events(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user) # 認証
+):
+    events = db.query(Event).all()
+    return events
+
+@app.post("/events", response_model=EventSchema)
+async def create_event(
+    event: EventCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    db_event = Event(
+        **event.dict(),
+        user_id=current_user.id
+    )
+    db.add(db_event)
+    db.commit()
+    db.refresh(db_event)
+    return db_event
+
+@app.put("/events/{event_id}", response_model=EventSchema)
+async def update_event(
+    event_id: int,
+    event: EventCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    db_event = db.query(Event).filter(Event.id == event_id).first()
+    if not db_event:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")
+    
+    if db_event.user_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to edit this event")
+
+    for var, value in vars(event).items():
+        setattr(db_event, var, value) if value is not None else None
+
+    db.add(db_event)
+    db.commit()
+    db.refresh(db_event)
+    return db_event
+
+@app.delete("/events/{event_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_event(
+    event_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    db_event = db.query(Event).filter(Event.id == event_id).first()
+    if not db_event:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")
+    
+    # 本人しか削除できないようにチェック
+    if db_event.user_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to delete this event")
+        
+    db.delete(db_event)
+    db.commit()
+    return
 
 frontend_path = os.path.join(os.path.dirname(__file__), "frontend")
 app.mount("/static", StaticFiles(directory=frontend_path), name="static")

@@ -12,6 +12,40 @@ if (!currentToken) {
     window.location.href = '/login';
 }
 
+// fetchのラッパー関数
+async function fetchWithAuth(url, options = {}) {
+    const headers = {
+        ...options.headers,
+    };
+
+    // Authorizationヘッダーを自動的に追加
+    if (currentToken) {
+        headers['Authorization'] = `Bearer ${currentToken}`;
+    }
+
+    // FormDataの場合、Content-Typeはfetchが自動設定するので削除
+    if (options.body instanceof FormData) {
+        delete headers['Content-Type'];
+    }
+
+    const response = await fetch(url, { ...options, headers });
+
+    if (response.status === 401) {
+        // トークンを削除してログインページにリダイレクト
+        localStorage.removeItem('access_token');
+        showMessage('セッションが切れました。再度ログインしてください。', 'error');
+        setTimeout(() => {
+            window.location.href = '/login';
+        }, 2000);
+        
+        // 401エラーの場合は、以降の処理を中断させるために例外を投げる
+        throw new Error('Unauthorized');
+    }
+
+    return response;
+}
+
+
 
 // Leafletアイコンのパス設定
 delete L.Icon.Default.prototype._getIconUrl;
@@ -319,11 +353,7 @@ function switchTab(tabName) {
 // 現在のユーザー情報を取得
 async function getCurrentUser() {
     try {
-        const response = await fetch('/user/me', {
-            headers: {
-                'Authorization': `Bearer ${currentToken}`
-            }
-        });
+        const response = await fetchWithAuth('/user/me');
         
         if (response.ok) {
             const user = await response.json();
@@ -331,7 +361,9 @@ async function getCurrentUser() {
             return user;
         }
     } catch (error) {
-        console.error('ユーザー情報の取得エラー:', error);
+        if (error.message !== 'Unauthorized') {
+            console.error('ユーザー情報の取得エラー:', error);
+        }
     }
     return null;
 }
@@ -343,11 +375,8 @@ window.deleteActivityFromMap = async function(activityId) {
     }
     
     try {
-        const response = await fetch(`/activities/${activityId}`, {
-            method: 'DELETE',
-            headers: {
-                'Authorization': `Bearer ${currentToken}`
-            }
+        const response = await fetchWithAuth(`/activities/${activityId}`, {
+            method: 'DELETE'
         });
         
         if (response.ok) {
@@ -358,7 +387,9 @@ window.deleteActivityFromMap = async function(activityId) {
             showMessage('削除に失敗しました', 'error');
         }
     } catch (error) {
-        showMessage('ネットワークエラー', 'error');
+        if (error.message !== 'Unauthorized') {
+            showMessage('ネットワークエラー', 'error');
+        }
     }
 };
 
@@ -376,11 +407,7 @@ async function loadActivitiesOnMap() {
     activityMarkers = [];
 
     try {
-        const response = await fetch('/activities/all', {
-            headers: {
-                'Authorization': `Bearer ${currentToken}`
-            }
-        });
+        const response = await fetchWithAuth('/activities/all');
         
         if (response.ok) {
             const activities = await response.json();
@@ -454,7 +481,9 @@ async function loadActivitiesOnMap() {
             });
         }
     } catch (error) {
-        console.error('地図データの読み込みエラー:', error);
+        if (error.message !== 'Unauthorized') {
+            console.error('地図データの読み込みエラー:', error);
+        }
     }
 }
 
@@ -549,11 +578,8 @@ function setupActivityForm() {
                 const url = editingActivityId ? `/activities/${editingActivityId}` : '/activities';
                 const method = editingActivityId ? 'PUT' : 'POST';
                 
-                const response = await fetch(url, {
+                const response = await fetchWithAuth(url, {
                     method: method,
-                    headers: {
-                        'Authorization': `Bearer ${currentToken}`
-                    },
                     body: formData
                 });
                 
@@ -587,7 +613,9 @@ function setupActivityForm() {
                     showMessage(result.detail || 'エラーが発生しました', 'error');
                 }
             } catch (error) {
-                showMessage('ネットワークエラー', 'error');
+                if (error.message !== 'Unauthorized') {
+                    showMessage('ネットワークエラー', 'error');
+                }
             }
         });
     }
@@ -596,11 +624,7 @@ function setupActivityForm() {
 // 自分の活動記録を読み込み
 async function loadMyActivities() {
     try {
-        const response = await fetch('/activities', {
-            headers: {
-                'Authorization': `Bearer ${currentToken}`
-            }
-        });
+        const response = await fetchWithAuth('/activities');
         
         if (response.ok) {
             const activities = await response.json();
@@ -609,18 +633,16 @@ async function loadMyActivities() {
             showMessage('データの読み込みに失敗しました', 'error');
         }
     } catch (error) {
-        showMessage('ネットワークエラー', 'error');
+        if (error.message !== 'Unauthorized') {
+            showMessage('ネットワークエラー', 'error');
+        }
     }
 }
 
 // 支部全体の活動記録を読み込み
 async function loadTeamActivities() {
     try {
-        const response = await fetch('/activities/all', {
-            headers: {
-                'Authorization': `Bearer ${currentToken}`
-            }
-        });
+        const response = await fetchWithAuth('/activities/all');
         
         if (response.ok) {
             const activities = await response.json();
@@ -629,7 +651,9 @@ async function loadTeamActivities() {
             showMessage('データの読み込みに失敗しました', 'error');
         }
     } catch (error) {
-        showMessage('ネットワークエラー', 'error');
+        if (error.message !== 'Unauthorized') {
+            showMessage('ネットワークエラー', 'error');
+        }
     }
 }
 
@@ -841,11 +865,8 @@ async function deleteActivity(id) {
     }
     
     try {
-        const response = await fetch(`/activities/${id}`, {
-            method: 'DELETE',
-            headers: {
-                'Authorization': `Bearer ${currentToken}`
-            }
+        const response = await fetchWithAuth(`/activities/${id}`, {
+            method: 'DELETE'
         });
         
         if (response.ok) {
@@ -856,7 +877,9 @@ async function deleteActivity(id) {
             showMessage('削除に失敗しました', 'error');
         }
     } catch (error) {
-        showMessage('ネットワークエラー', 'error');
+        if (error.message !== 'Unauthorized') {
+            showMessage('ネットワークエラー', 'error');
+        }
     }
 }
 
