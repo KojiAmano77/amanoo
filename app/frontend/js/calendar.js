@@ -5,6 +5,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const eventForm = document.getElementById('event-form');
     const modalTitle = document.getElementById('modal-title');
     const deleteButton = document.getElementById('delete-event-button');
+    const saveButton = document.getElementById('save-event-button');
     const logoutButton = document.getElementById('logout-button');
     let currentUserId = null;
     
@@ -139,9 +140,14 @@ document.addEventListener('DOMContentLoaded', function() {
 
         calendar.render();
     }
+    
     // --- モーダル関連の処理 ---
     function openModal(data = {}) {
         eventForm.reset(); // フォームをリセット
+        const inputs = eventForm.querySelectorAll('input, textarea');
+        const urlInputGroup = document.getElementById('url-input-group'); // グループ全体を取得
+
+        // フォームにデータを入力
         document.getElementById('event-id').value = data.id || '';
         document.getElementById('event-title').value = data.title || '';
         document.getElementById('event-description').value = data.description || '';
@@ -156,8 +162,6 @@ document.addEventListener('DOMContentLoaded', function() {
             adjustUrlDisplay.classList.remove('hidden');
         } else {
             adjustUrlDisplay.classList.add('hidden');
-            adjustUrlLink.href = '#';
-            adjustUrlLink.textContent = '';
         }
 
         // 日時フォーマットの調整
@@ -177,19 +181,35 @@ document.addEventListener('DOMContentLoaded', function() {
             document.getElementById('event-start').value = toLocalISOString(defaultDate);
         }
 
-        document.getElementById('event-end').value = toLocalISOString(data.end);
-
-        if (data.id) {
-            modalTitle.textContent = '予定を編集';
-            // 自分のイベントの場合のみ削除ボタンを表示
-            if (data.user_id === currentUserId) {
-                deleteButton.classList.remove('hidden');
-            } else {
-                deleteButton.classList.add('hidden');
-            }
+        if (data.id === undefined && !data.end) {
+            // New event: set end time to start time
+            document.getElementById('event-end').value = document.getElementById('event-start').value;
         } else {
+            // Existing event: use its end time (can be blank)
+            document.getElementById('event-end').value = toLocalISOString(data.end);
+        }
+
+        if (data.id) { // 既存イベントの編集
+            modalTitle.textContent = '予定を編集';
+            if (data.user_id === currentUserId) {
+                // 所有者: 編集可能
+                inputs.forEach(input => input.disabled = false);
+                saveButton.classList.remove('hidden');
+                deleteButton.classList.remove('hidden');
+                urlInputGroup.classList.remove('hidden'); // 入力グループを表示
+            } else {
+                // 所有者以外: 読み取り専用
+                inputs.forEach(input => input.disabled = true);
+                saveButton.classList.add('hidden');
+                deleteButton.classList.add('hidden');
+                urlInputGroup.classList.add('hidden'); // 入力グループを非表示
+            }
+        } else { // 新規イベント作成
             modalTitle.textContent = '予定を追加';
+            inputs.forEach(input => input.disabled = false);
+            saveButton.classList.remove('hidden');
             deleteButton.classList.add('hidden');
+            urlInputGroup.classList.remove('hidden'); // 入力グループを表示
         }
         modal.style.display = 'block';
     }
@@ -229,7 +249,6 @@ document.addEventListener('DOMContentLoaded', function() {
             if (!response.ok) {
                 throw new Error('保存に失敗しました');
             }
-            // PUTの場合は200 OK、POSTの場合は200 OK(FastAPIが201を返す場合もあるが、ここでは200系で統一)
             return response.json();
         })
         .then(() => {

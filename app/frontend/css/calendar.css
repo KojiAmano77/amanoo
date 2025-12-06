@@ -178,3 +178,41 @@ body {
 .hidden {
     display: none;
 }
+
+/* Custom styles for datetime fields */
+.datetime-group {
+    display: flex;
+    gap: 5px; /* Reduced gap for smaller screens, maintaining horizontal layout */
+    margin-bottom: 10px; /* Slightly reduced margin */
+    flex-wrap: wrap; /* Allow wrapping on very small screens if necessary */
+    justify-content: space-between; /* Distribute space */
+}
+
+.datetime-group .form-group {
+    flex: 1 1 auto; /* Allow items to grow, shrink, and take available width */
+    min-width: 140px; /* Minimum width for each input group to prevent excessive shrinking */
+    margin-bottom: 5px; /* Smaller margin when wrapped */
+}
+
+.datetime-group .form-group label {
+    font-size: 0.8em; /* Smaller font for labels */
+    margin-bottom: 3px;
+    white-space: nowrap; /* Prevent label from wrapping */
+}
+
+.datetime-group .form-group input {
+    width: auto; /* Allow input to size naturally based on content/min-width */
+    min-width: 0; /* Remove default min-width if any */
+    padding: 5px 8px; /* Reduced padding */
+    font-size: 0.9em; /* Smaller font for input text */
+}
+
+/* Hide modal title */
+#modal-title {
+    display: none;
+}
+
+/* In month view, hide the event time to prioritize showing the title */
+.fc-daygrid-event .fc-event-time {
+    display: none;
+}

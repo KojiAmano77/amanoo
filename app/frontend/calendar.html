@@ -30,24 +30,26 @@
                     <label for="event-title">タイトル</label>
                     <input type="text" id="event-title" required>
                 </div>
-                <div class="form-group">
-                    <label for="event-start">開始日時</label>
-                    <input type="datetime-local" id="event-start" required>
-                </div>
-                <div class="form-group">
-                    <label for="event-end">終了日時 (任意)</label>
-                    <input type="datetime-local" id="event-end">
+                <div class="datetime-group">
+                    <div class="form-group">
+                        <label for="event-start">開始日時</label>
+                        <input type="datetime-local" id="event-start" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="event-end">終了日時</label>
+                        <input type="datetime-local" id="event-end">
+                    </div>
                 </div>
                 <div class="form-group">
                     <label for="event-description">詳細 (任意)</label>
-                    <textarea id="event-description" rows="5"></textarea>
+                    <textarea id="event-description" rows="18"></textarea>
                 </div>
-                <div class="form-group">
+                <div class="form-group" id="url-input-group">
                     <label for="event-adjust-url">URL (任意)</label>
                     <input type="url" id="event-adjust-url" placeholder="https://chouseisan.com/...">
-                    <div id="event-adjust-url-display" class="hidden">
-                        <a href="#" target="_blank" rel="noopener noreferrer"></a>
-                    </div>
+                </div>
+                <div id="event-adjust-url-display" class="hidden" style="margin-bottom: 15px; word-wrap: break-word;">
+                    <a href="#" target="_blank" rel="noopener noreferrer"></a>
                 </div>
                 <div class="modal-buttons">
                     <button type="submit" id="save-event-button">保存</button>
