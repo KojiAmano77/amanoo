@@ -1,7 +1,7 @@
 let currentToken = localStorage.getItem('access_token');
 
 if (currentToken) {
-    window.location.href = '/dashboard';
+    window.location.href = '/';
 }
 
 // ログインフォーム
@@ -27,7 +27,7 @@ document.getElementById('login-form').addEventListener('submit', async (e) => {
             localStorage.setItem('access_token', result.access_token);
             showMessage('ログインしました', 'success');
             setTimeout(() => {
-                window.location.href = '/dashboard';
+                window.location.href = '/';
             }, 1000);
         } else {
             showMessage(result.detail || 'ログインエラー', 'error');
@@ -104,7 +104,6 @@ document.addEventListener('DOMContentLoaded', function() {
     if (forgotPasswordLink) {
         forgotPasswordLink.addEventListener('click', (e) => {
             e.preventDefault();
-            console.log('パスワードリセットリンクがクリックされました');
             document.getElementById('login-form').parentElement.style.display = 'none';
             document.getElementById('register-form').parentElement.style.display = 'none';
             document.getElementById('reset-form-section').style.display = 'block';
@@ -116,7 +115,6 @@ document.addEventListener('DOMContentLoaded', function() {
     if (backToLoginLink) {
         backToLoginLink.addEventListener('click', (e) => {
             e.preventDefault();
-            console.log('ログインに戻るリンクがクリックされました');
             document.getElementById('reset-form-section').style.display = 'none';
             document.getElementById('login-form').parentElement.style.display = 'block';
             document.getElementById('register-form').parentElement.style.display = 'block';

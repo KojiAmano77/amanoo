@@ -24,7 +24,7 @@ http {
     
     server {
         listen 80;
-        server_name amanoo.f5.si;
+        server_name sanseiaichi12.f5.si;
         
         # Let's Encrypt用のacme-challenge
         location /.well-known/acme-challenge/ {
@@ -57,7 +57,7 @@ echo "3. SSL証明書を取得..."
 docker-compose run --rm certbot certonly --webroot \
     -w /var/www/certbot \
     --email koji.amano.g@gmail.com \
-    -d amanoo.f5.si \
+    -d sanseiaichi12.f5.si \
     --agree-tos \
     --no-eff-email
 
@@ -82,4 +82,4 @@ echo "# 以下の行を追加:"
 echo "0 12 * * * /home/koji/fastapi_nginx_project/renew-ssl.sh"
 
 echo "=== セットアップ完了 ==="
-echo "https://amanoo.f5.si/dashboard でアクセスできるはずです"
+echo "https://sanseiaichi12.f5.si/dashboard でアクセスできるはずです"

@@ -44,7 +44,7 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "https://amanoo.f5.si",
+        "https://sanseiaichi12.f5.si",
         "http://localhost:3000",
         "http://localhost:8000"
     ],
@@ -351,13 +351,13 @@ async def delete_activity(
 # メインページ
 @app.get("/", response_class=HTMLResponse)
 async def root(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request})
+    return templates.TemplateResponse("calendar.html", {"request": request})
 
-@app.get("/dashboard", response_class=HTMLResponse)
-async def dashboard(request: Request):
-    return templates.TemplateResponse("dashboard.html", {"request": request})
+@app.get("/activity", response_class=HTMLResponse)
+async def activity_page(request: Request):
+    return templates.TemplateResponse("activity.html", {"request": request})
 
-@app.get("/calendar.html", response_class=HTMLResponse)
+@app.get("/calendar", response_class=HTMLResponse)
 async def calendar_page(request: Request):
     return templates.TemplateResponse("calendar.html", {"request": request})
 
@@ -365,7 +365,7 @@ async def calendar_page(request: Request):
 @app.get("/events", response_model=List[EventSchema])
 async def get_events(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user) # 認証
+    # current_user: User = Depends(get_current_user) # 公開アクセスに変更
 ):
     events = db.query(Event).all()
     return events

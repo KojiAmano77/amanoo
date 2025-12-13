@@ -175,7 +175,6 @@ function initMaps() {
             selectedLat = center.lat;
             selectedLng = center.lng;
             
-            console.log('ポリゴンが編集されました。新しいGeoJSON:', currentPolygonGeoJSON);
         }
     });
 
@@ -196,7 +195,6 @@ function initMaps() {
 // 地図を現在地に設定（初期化時用）
 function setMapToCurrentLocation() {
     if (!navigator.geolocation) {
-        console.log('位置情報取得に対応していないため、デフォルト位置を使用します');
         return;
     }
 
@@ -208,10 +206,8 @@ function setMapToCurrentLocation() {
             // 地図を現在地に移動
             map.setView([lat, lng], 15);
             
-            console.log('地図を現在地に設定しました');
         },
         function(error) {
-            console.log('現在地取得に失敗しました。デフォルト位置を使用します。', error.message);
             // エラー時はデフォルト位置のまま（東岡崎駅周辺）
         },
         {
@@ -526,15 +522,6 @@ function validateFormAndUpdateButton() {
         submitBtn.style.opacity = '0.6';
     }
     
-    console.log('バリデーション結果:', {
-        activityType: !!activityType,
-        activityDate: !!activityDate,
-        hasLocation,
-        hasPolygonData,
-        isLocationReady,
-        isValid
-    });
-    
     return isValid;
 }
 
@@ -768,7 +755,6 @@ function displayTeamActivities(activities) {
 
 // 活動記録編集
 async function editActivity(id, activityType, location, date, memo, latitude, longitude, locationName, polygonCoords) {
-    console.log('editActivity called with polygonCoords:', polygonCoords);
     
     editingActivityId = id;
     document.getElementById('activity-type').value = activityType;
@@ -800,7 +786,6 @@ async function editActivity(id, activityType, location, date, memo, latitude, lo
     // ポリゴンデータがある場合は地図に復元
     if (polygonCoords && polygonCoords !== '' && polygonCoords !== 'null' && polygonCoords !== 'undefined') {
         try {
-            console.log('ポリゴンデータを復元中:', polygonCoords);
             const geoJSON = JSON.parse(polygonCoords);
             currentPolygonGeoJSON = geoJSON;
             
@@ -831,8 +816,6 @@ async function editActivity(id, activityType, location, date, memo, latitude, lo
                     map.fitBounds(polygon.getBounds());
                 }
                 
-                console.log('編集可能なポリゴンを復元しました');
-                
                 // ポリゴンの中心点を計算して座標を設定
                 const bounds = polygon.getBounds();
                 const center = bounds.getCenter();
@@ -851,8 +834,6 @@ async function editActivity(id, activityType, location, date, memo, latitude, lo
         } catch (parseError) {
             console.error('ポリゴンデータの解析エラー:', parseError, 'データ:', polygonCoords);
         }
-    } else {
-        console.log('ポリゴンデータがありません:', polygonCoords);
     }
     
     switchTab('map-view');

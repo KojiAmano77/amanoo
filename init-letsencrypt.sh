@@ -2,7 +2,7 @@
 
 # Let's Encrypt証明書の初期化スクリプト
 
-domains=(amanoo.f5.si)
+domains=(sanseiaichi12.f5.si)
 rsa_key_size=4096
 data_path="./certbot"
 email="koji.amano.g@gmail.com" # メールアドレスを適切に設定してください

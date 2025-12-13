@@ -1,3 +1,4 @@
 .env
 data/receipts.csv
 .env.production
+certbot/conf/archive/*/privkey*.pem

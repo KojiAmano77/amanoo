@@ -10,9 +10,12 @@
 </head>
 <body>
     <div class="header">
-        <a href="/dashboard" class="back-link"><i class="fas fa-arrow-left"></i> ダッシュボードへ戻る</a>
+        <a href="/activity" class="back-link"><i class="fas fa-arrow-left"></i> 活動記録ページへ遷移</a>
         <h1>支部活動予定</h1>
-        <button id="logout-button" class="logout-btn">ログアウト</button>
+        <div class="auth-buttons">
+            <button id="login-button" class="login-btn hidden" onclick="window.location.href='/login'">ログイン</button>
+            <button id="logout-button" class="logout-btn hidden">ログアウト</button>
+        </div>
     </div>
 
     <div id="calendar-container">
