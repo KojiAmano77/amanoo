@@ -1,4 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+
+# Environment Variables
 .env
+.env.*
+
+# Data
 data/receipts.csv
-.env.production
-certbot/conf/archive/*/privkey*.pem
+*.db
+*.sqlite3
+
+# Certbot / SSL (Exclude sensitive data)
+certbot/conf/accounts/
+certbot/conf/archive/
+certbot/conf/live/
+certbot/conf/renewal/
+certbot/conf/keys/
+certbot/conf/csr/
+
+# OS / Editor
+.DS_Store
+.vscode/
+.idea/
