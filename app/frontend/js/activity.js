@@ -7,6 +7,8 @@ let drawnItems;
 let currentPolygon = null;
 let currentPolygonGeoJSON = null;
 let currentUserId = null;
+let gpxTrackLayer = null;
+let gpxMarkers = [];
 
 if (!currentToken) {
     window.location.href = '/login';
@@ -111,11 +113,16 @@ function initMaps() {
     });
     
     function handlePolygonCreated(layer) {
+        // GPXトラックが表示されている場合は削除（相互排他）
+        if (gpxTrackLayer || gpxMarkers.length > 0) {
+            clearGpxTrack();
+        }
+
         // 既存のポリゴンを削除
         if (currentPolygon) {
             drawnItems.removeLayer(currentPolygon);
         }
-        
+
         // 新しいポリゴンを追加
         currentPolygon = layer;
         drawnItems.addLayer(layer);
@@ -153,7 +160,7 @@ function initMaps() {
                 // バリデーション実行
                 validateFormAndUpdateButton();
             })
-            .catch(error => {
+            .catch(_error => {
                 const fallback = `緯度: ${center.lat.toFixed(5)}, 経度: ${center.lng.toFixed(5)}`;
                 locationDisplay.textContent = fallback + 'エリア';
                 locationDisplay.className = 'location-display selected';
@@ -165,7 +172,7 @@ function initMaps() {
     }
 
     // ポリゴン編集・削除イベント
-    map.on(L.Draw.Event.EDITED, function (e) {
+    map.on(L.Draw.Event.EDITED, function (_e) {
         if (currentPolygon) {
             // 編集後のポリゴンのGeoJSONを更新
             currentPolygonGeoJSON = currentPolygon.toGeoJSON();
@@ -417,28 +424,39 @@ async function loadActivitiesOnMap() {
                 if (activity.polygon_coordinates) {
                     try {
                         const geoJSON = JSON.parse(activity.polygon_coordinates);
-                        const deleteButton = currentUserId === activity.user_id 
+                        const deleteButton = currentUserId === activity.user_id
                             ? `<br><button onclick="window.deleteActivityFromMap(${activity.id})" class="delete-btn" style="background-color: #dc3545; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 12px;">🗑️ 削除</button>`
                             : '';
-                        
-                        const polygon = L.geoJSON(geoJSON, {
-                            style: {
-                                color: '#4A1A4A',           // 境界線：非常に濃い紫
-                                fillColor: '#663399',       // 塗りつぶし：濃い紫
-                                weight: 2,
-                                opacity: 0.9,
-                                fillOpacity: 0.5
-                            }
-                        }).addTo(map).bindPopup(`
+                        const popupContent = `
                             <b>${activity.activity_type}</b><br>
                             担当: ${activity.username}<br>
                             日付: ${new Date(activity.date).toLocaleDateString('ja-JP')}<br>
                             場所: ${activity.location}<br>
                             ${activity.memo ? `メモ: ${activity.memo}` : ''}${deleteButton}
-                        `);
-                        activityMarkers.push(polygon);
-                    } catch (e) {
-                        console.error('ポリゴンデータの解析エラー:', e);
+                        `;
+                        const geoType = geoJSON.geometry && geoJSON.geometry.type;
+
+                        if (geoType === 'LineString') {
+                            // GPX軌跡はオレンジのポリラインで表示
+                            const layer = L.geoJSON(geoJSON, {
+                                style: { color: '#FF6B35', weight: 3, opacity: 0.85 }
+                            }).addTo(map).bindPopup(popupContent);
+                            activityMarkers.push(layer);
+                        } else {
+                            // ポリゴンは濃い紫で表示
+                            const polygon = L.geoJSON(geoJSON, {
+                                style: {
+                                    color: '#4A1A4A',
+                                    fillColor: '#663399',
+                                    weight: 2,
+                                    opacity: 0.9,
+                                    fillOpacity: 0.5
+                                }
+                            }).addTo(map).bindPopup(popupContent);
+                            activityMarkers.push(polygon);
+                        }
+                    } catch (err) {
+                        console.error('座標データの解析エラー:', err);
                         // フォールバック: マーカー表示
                         if (activity.latitude && activity.longitude) {
                             const deleteButton = currentUserId === activity.user_id 
@@ -491,8 +509,8 @@ function validateFormAndUpdateButton() {
     const hasLocation = locationDisplay.classList.contains('selected');
     const submitBtn = document.querySelector('.submit-btn');
     
-    // ポリゴンデータの存在確認
-    const hasPolygonData = currentPolygonGeoJSON && currentPolygon;
+    // ポリゴンまたはGPXトラックの存在確認
+    const hasPolygonData = currentPolygonGeoJSON !== null;
     
     // 住所取得が完了しているかチェック（「住所取得中...」でない）
     const isLocationReady = locationDisplay.textContent !== '住所取得中...';
@@ -791,44 +809,56 @@ async function editActivity(id, activityType, location, date, memo, latitude, lo
             
             // 地図タブに切り替え後にポリゴンを復元
             switchTab('map-view');
-            
+
             setTimeout(() => {
-                // GeoJSONからLeafletレイヤーを作成（編集可能な形式で）
-                const coordinates = geoJSON.geometry.coordinates[0]; // ポリゴンの最初のリング
-                
-                // Leaflet LatLng配列に変換（GeoJSONは[lng, lat]、Leafletは[lat, lng]）
-                const latLngs = coordinates.map(coord => [coord[1], coord[0]]);
-                
-                // Leaflet Polygonレイヤーを作成（これによりDrawツールで編集可能になる）
-                const polygon = L.polygon(latLngs, {
-                    color: '#4A1A4A',
-                    fillColor: '#663399',
-                    fillOpacity: 0.5,
-                    weight: 2,
-                    opacity: 0.9
-                });
-                
-                currentPolygon = polygon;
-                drawnItems.addLayer(polygon);
-                
-                // 地図の表示範囲をポリゴンに合わせる
-                if (polygon.getBounds) {
-                    map.fitBounds(polygon.getBounds());
+                const geoType = geoJSON.geometry && geoJSON.geometry.type;
+
+                if (geoType === 'LineString') {
+                    // GPX軌跡として復元
+                    const latLngs = geoJSON.geometry.coordinates.map(([lon, lat]) => [lat, lon]);
+
+                    if (gpxTrackLayer) { map.removeLayer(gpxTrackLayer); }
+                    gpxMarkers.forEach(m => map.removeLayer(m));
+                    gpxMarkers = [];
+
+                    gpxTrackLayer = L.polyline(latLngs, {
+                        color: '#FF6B35', weight: 4, opacity: 0.85
+                    }).addTo(map);
+
+                    const startMarker = L.circleMarker(latLngs[0], {
+                        radius: 8, fillColor: '#4CAF50', color: '#fff', weight: 2, fillOpacity: 1
+                    }).addTo(map).bindPopup('スタート');
+                    gpxMarkers.push(startMarker);
+
+                    const endMarker = L.circleMarker(latLngs[latLngs.length - 1], {
+                        radius: 8, fillColor: '#f44336', color: '#fff', weight: 2, fillOpacity: 1
+                    }).addTo(map).bindPopup('ゴール');
+                    gpxMarkers.push(endMarker);
+
+                    map.fitBounds(gpxTrackLayer.getBounds());
+                    document.getElementById('gpx-clear-btn').classList.remove('hidden');
+
+                } else {
+                    // ポリゴンとして復元（編集可能な形式で）
+                    const latLngs = geoJSON.geometry.coordinates[0].map(([lon, lat]) => [lat, lon]);
+                    const polygon = L.polygon(latLngs, {
+                        color: '#4A1A4A', fillColor: '#663399',
+                        fillOpacity: 0.5, weight: 2, opacity: 0.9
+                    });
+                    currentPolygon = polygon;
+                    drawnItems.addLayer(polygon);
+
+                    if (polygon.getBounds) { map.fitBounds(polygon.getBounds()); }
+
+                    const center = polygon.getBounds().getCenter();
+                    selectedLat = center.lat;
+                    selectedLng = center.lng;
                 }
-                
-                // ポリゴンの中心点を計算して座標を設定
-                const bounds = polygon.getBounds();
-                const center = bounds.getCenter();
-                selectedLat = center.lat;
-                selectedLng = center.lng;
-                
-                // バリデーション実行
-                setTimeout(() => {
-                    validateFormAndUpdateButton();
-                }, 100);
-                
+
+                setTimeout(() => { validateFormAndUpdateButton(); }, 100);
+
             }, 300);
-            
+
             return; // ここで終了して、下のswitchTabを実行しない
             
         } catch (parseError) {
@@ -993,6 +1023,156 @@ function createLocationDisplay(lat, lng, originalText, savedLocationName) {
 
 // 現在取得中の場所名を保存する変数
 let currentLocationName = null;
+
+// GPXファイルのアップロード処理
+function handleGpxUpload(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            const points = parseGpxFile(e.target.result);
+            if (points.length === 0) {
+                showMessage('GPXファイルにトラックデータが見つかりませんでした', 'error');
+                return;
+            }
+            drawGpxTrack(points);
+            showMessage(`GPXファイルを読み込みました（${points.length.toLocaleString()}ポイント）`, 'success');
+        } catch (err) {
+            showMessage('GPXファイルの読み込みに失敗しました', 'error');
+        }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+}
+
+function parseGpxFile(xmlContent) {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(xmlContent, 'application/xml');
+
+    if (doc.querySelector('parsererror')) {
+        throw new Error('Invalid GPX XML');
+    }
+
+    const points = [];
+    doc.querySelectorAll('trkpt').forEach(pt => {
+        const lat = parseFloat(pt.getAttribute('lat'));
+        const lon = parseFloat(pt.getAttribute('lon'));
+        if (!isNaN(lat) && !isNaN(lon)) {
+            points.push([lat, lon]);
+        }
+    });
+
+    return points;
+}
+
+function drawGpxTrack(points) {
+    // 既存のGPXトラックを削除
+    if (gpxTrackLayer) { map.removeLayer(gpxTrackLayer); gpxTrackLayer = null; }
+    gpxMarkers.forEach(m => map.removeLayer(m));
+    gpxMarkers = [];
+
+    // ポリゴンが描かれている場合は削除（相互排他）
+    if (currentPolygon) {
+        drawnItems.removeLayer(currentPolygon);
+        currentPolygon = null;
+    }
+    currentPolygonGeoJSON = null;
+
+    gpxTrackLayer = L.polyline(points, {
+        color: '#FF6B35',
+        weight: 4,
+        opacity: 0.85
+    }).addTo(map);
+
+    const startMarker = L.circleMarker(points[0], {
+        radius: 8, fillColor: '#4CAF50', color: '#fff', weight: 2, fillOpacity: 1
+    }).addTo(map).bindPopup('スタート');
+    gpxMarkers.push(startMarker);
+
+    const endMarker = L.circleMarker(points[points.length - 1], {
+        radius: 8, fillColor: '#f44336', color: '#fff', weight: 2, fillOpacity: 1
+    }).addTo(map).bindPopup('ゴール');
+    gpxMarkers.push(endMarker);
+
+    map.fitBounds(gpxTrackLayer.getBounds(), { padding: [20, 20] });
+
+    // GeoJSON LineStringとして保存（polygon_coordinatesフィールドと共用）
+    currentPolygonGeoJSON = {
+        type: 'Feature',
+        geometry: {
+            type: 'LineString',
+            coordinates: points.map(([lat, lon]) => [lon, lat])
+        },
+        properties: {}
+    };
+
+    // トラック中心点を計算
+    const bounds = gpxTrackLayer.getBounds();
+    const center = bounds.getCenter();
+    selectedLat = center.lat;
+    selectedLng = center.lng;
+
+    // 総距離を計算して情報表示
+    let totalMeters = 0;
+    for (let i = 1; i < points.length; i++) {
+        totalMeters += map.distance(points[i - 1], points[i]);
+    }
+    const distanceText = totalMeters >= 1000
+        ? (totalMeters / 1000).toFixed(2) + ' km'
+        : Math.round(totalMeters) + ' m';
+
+    const infoEl = document.getElementById('gpx-info');
+    infoEl.textContent = `🏃 軌跡: ${points.length.toLocaleString()} ポイント｜総距離: ${distanceText}`;
+    infoEl.classList.remove('hidden');
+
+    document.getElementById('gpx-clear-btn').classList.remove('hidden');
+
+    // 中心点から住所を取得して「場所」フィールドに自動入力
+    const locationDisplay = document.getElementById('location');
+    locationDisplay.textContent = '住所取得中...';
+    locationDisplay.className = 'location-display';
+    validateFormAndUpdateButton();
+
+    getLocationName(center.lat, center.lng)
+        .then(locationName => {
+            currentLocationName = locationName;
+            locationDisplay.textContent = locationName + 'エリア';
+            locationDisplay.className = 'location-display selected';
+            validateFormAndUpdateButton();
+        })
+        .catch(() => {
+            const fallback = `緯度: ${center.lat.toFixed(5)}, 経度: ${center.lng.toFixed(5)}`;
+            currentLocationName = fallback;
+            locationDisplay.textContent = fallback + 'エリア';
+            locationDisplay.className = 'location-display selected';
+            validateFormAndUpdateButton();
+        });
+}
+
+function clearGpxTrack() {
+    if (gpxTrackLayer) {
+        map.removeLayer(gpxTrackLayer);
+        gpxTrackLayer = null;
+    }
+    gpxMarkers.forEach(m => map.removeLayer(m));
+    gpxMarkers = [];
+
+    currentPolygonGeoJSON = null;
+    selectedLat = null;
+    selectedLng = null;
+    currentLocationName = null;
+
+    const locationDisplay = document.getElementById('location');
+    locationDisplay.textContent = '地図でエリアを描画してください';
+    locationDisplay.className = 'location-display';
+
+    document.getElementById('gpx-info').classList.add('hidden');
+    document.getElementById('gpx-clear-btn').classList.add('hidden');
+
+    validateFormAndUpdateButton();
+}
 
 // ログアウト
 function logout() {

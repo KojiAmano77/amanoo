@@ -50,6 +50,9 @@
                 <div class="map-header">
                     <h2>エリアを描画して記録作成</h2>
                     <button id="current-location-btn" class="current-location-btn" onclick="moveToCurrentLocation()">📍 現在地に移動</button>
+                    <button class="gpx-upload-btn" onclick="document.getElementById('gpx-file-input').click()">📂 GPXを読み込む</button>
+                    <input type="file" id="gpx-file-input" accept=".gpx" style="display:none" onchange="handleGpxUpload(event)">
+                    <button id="gpx-clear-btn" class="gpx-clear-btn hidden" onclick="clearGpxTrack()">✕ 軌跡を消去</button>
                 </div>
                 
                 <form id="activity-form">
@@ -85,6 +88,7 @@
                 </div>
                 
                 <div id="map"></div>
+                <div id="gpx-info" class="gpx-info hidden"></div>
                 
                 <p style="color: #666; font-size: 14px; margin-top: 15px;">地図上でポリゴン（多角形）を描画すると、そのエリアでの活動記録を作成できます。</p>
             </div>
@@ -137,6 +141,6 @@
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
-    <script src="/static/js/activity.js?v=5"></script>
+    <script src="/static/js/activity.js?v=7"></script>
 </body>
 </html>

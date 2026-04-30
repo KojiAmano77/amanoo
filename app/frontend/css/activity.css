@@ -334,6 +334,60 @@ button:active {
     cursor: not-allowed;
 }
 
+.gpx-upload-btn {
+    background-color: #2196F3;
+    padding: 8px 12px;
+    font-size: 13px;
+    font-weight: bold;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    white-space: nowrap;
+    flex-shrink: 0;
+    width: fit-content;
+    min-width: auto;
+}
+
+.gpx-upload-btn:hover {
+    background-color: #1976D2;
+}
+
+.gpx-clear-btn {
+    background-color: #9E9E9E;
+    padding: 8px 12px;
+    font-size: 13px;
+    font-weight: bold;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    white-space: nowrap;
+    flex-shrink: 0;
+    width: fit-content;
+    min-width: auto;
+    color: white;
+}
+
+.gpx-clear-btn:hover {
+    background-color: #757575;
+}
+
+.gpx-info {
+    background-color: #E3F2FD;
+    border: 1px solid #90CAF9;
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-size: 14px;
+    color: #1565C0;
+    margin-bottom: 10px;
+}
+
+@media (max-width: 767px) {
+    .gpx-upload-btn, .gpx-clear-btn {
+        padding: 6px 8px;
+        font-size: 12px;
+    }
+}
+
 .map-toggle-btn {
     background-color: #2196F3;
     margin-top: 5px;
