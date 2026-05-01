@@ -172,7 +172,7 @@ button:active {
     border: 1px solid #f5c6cb;
 }
 .hidden {
-    display: none;
+    display: none !important;
 }
 
 /* 期間指定UI */
@@ -342,6 +342,10 @@ button:active {
     border: none;
     border-radius: 6px;
     cursor: pointer;
+    transition: background-color 0.3s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     white-space: nowrap;
     flex-shrink: 0;
     width: fit-content;
@@ -360,6 +364,10 @@ button:active {
     border: none;
     border-radius: 6px;
     cursor: pointer;
+    transition: background-color 0.3s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     white-space: nowrap;
     flex-shrink: 0;
     width: fit-content;
@@ -383,7 +391,7 @@ button:active {
 
 @media (max-width: 767px) {
     .gpx-upload-btn, .gpx-clear-btn {
-        padding: 6px 8px;
+        padding: 6px 10px;
         font-size: 12px;
     }
 }
@@ -530,11 +538,17 @@ button:active {
         display: block;
     }
     
-    /* モバイルでも地図ヘッダーを横並びに保持（省スペース） */
+    /* モバイルでは見出しとボタン群を縦に分ける */
+    .map-header {
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
     .map-header h2 {
         font-size: 1.1rem;
+        flex: 0 0 100%;
     }
-    
+
     .current-location-btn {
         padding: 6px 10px;
         font-size: 12px;
