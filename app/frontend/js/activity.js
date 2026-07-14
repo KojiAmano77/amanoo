@@ -7,8 +7,87 @@ let drawnItems;
 let currentPolygon = null;
 let currentPolygonGeoJSON = null;
 let currentUserId = null;
+let currentUserIsAdmin = false;
 let gpxTrackLayer = null;
 let gpxMarkers = [];
+
+// 軌跡・エリアの配色パレット（活動IDに応じて動的に割り当て）
+const ROUTE_COLORS = [
+    '#E74C3C', // 赤
+    '#2980B9', // 青
+    '#27AE60', // 緑
+    '#F39C12', // オレンジ
+    '#8E44AD', // 紫
+    '#16A085', // ティール
+    '#C0392B', // 濃い赤
+    '#1A5276', // 濃い青
+    '#1E8449', // 濃い緑
+    '#D68910', // 濃いオレンジ
+    '#6C3483', // 濃い紫
+    '#0E6655', // 濃いティール
+];
+
+const activityColorMap = new Map(); // activityId → 現在の色
+const activityLayerMap = new Map(); // activityId → Leafletレイヤー
+
+function getActivityColor(activityId) {
+    if (activityColorMap.has(activityId)) {
+        return activityColorMap.get(activityId);
+    }
+    const color = ROUTE_COLORS[activityId % ROUTE_COLORS.length];
+    activityColorMap.set(activityId, color);
+    return color;
+}
+
+window.changeRouteColor = function(activityId, newColor) {
+    activityColorMap.set(activityId, newColor);
+    const layer = activityLayerMap.get(activityId);
+    if (layer) {
+        layer.setStyle({ color: newColor, fillColor: newColor });
+    }
+    document.querySelectorAll(`.route-color-input[data-id="${activityId}"]`).forEach(el => {
+        el.value = newColor;
+    });
+};
+
+function createColorCell(activity) {
+    const td = document.createElement('td');
+    if (!activity.polygon_coordinates) {
+        td.innerHTML = '<span style="color:#bbb;font-size:12px;">-</span>';
+        return td;
+    }
+    const color = getActivityColor(activity.id);
+    td.innerHTML = `<input type="color" class="route-color-input" data-id="${activity.id}" value="${color}"
+        title="クリックで色を一時変更（保存されません）"
+        style="width:30px;height:24px;padding:1px;border:1px solid #ccc;border-radius:3px;cursor:pointer;"
+        onchange="changeRouteColor(${activity.id}, this.value)">`;
+    return td;
+}
+
+function normalizeGeoJSON(raw) {
+    if (!raw) return null;
+    let parsed = raw;
+    if (typeof raw === 'string') {
+        try {
+            parsed = JSON.parse(raw);
+        } catch (e) {
+            return null;
+        }
+    }
+
+    // If it's already a Feature with geometry, return as-is
+    if (parsed && parsed.geometry && parsed.type && parsed.type.toLowerCase() === 'feature') {
+        return parsed;
+    }
+
+    // If it's a raw Geometry (LineString/Polygon), wrap into a Feature
+    if (parsed && parsed.type && (parsed.type === 'LineString' || parsed.type === 'Polygon')) {
+        return { type: 'Feature', geometry: parsed, properties: {} };
+    }
+
+    // Otherwise, return parsed object (best-effort)
+    return parsed;
+}
 
 if (!currentToken) {
     window.location.href = '/login';
@@ -350,6 +429,8 @@ function switchTab(tabName) {
         loadMyActivities();
     } else if (tabName === 'team-activities') {
         loadTeamActivities();
+    } else if (tabName === 'admin-users') {
+        loadAdminUsers();
     }
 }
 
@@ -361,6 +442,11 @@ async function getCurrentUser() {
         if (response.ok) {
             const user = await response.json();
             currentUserId = user.id;
+            currentUserIsAdmin = Boolean(user.is_admin);
+            const adminTab = document.getElementById('admin-tab');
+            if (adminTab) {
+                adminTab.classList.toggle('hidden', !currentUserIsAdmin);
+            }
             return user;
         }
     } catch (error) {
@@ -408,6 +494,7 @@ async function loadActivitiesOnMap() {
         map.removeLayer(marker);
     });
     activityMarkers = [];
+    activityLayerMap.clear();
 
     try {
         const response = await fetchWithAuth('/activities/all');
@@ -423,8 +510,9 @@ async function loadActivitiesOnMap() {
                 // ポリゴンデータがある場合はポリゴンを表示
                 if (activity.polygon_coordinates) {
                     try {
-                        const geoJSON = JSON.parse(activity.polygon_coordinates);
-                        const deleteButton = currentUserId === activity.user_id
+                        const geoJSON = normalizeGeoJSON(activity.polygon_coordinates);
+                        const canDelete = currentUserId === activity.user_id || currentUserIsAdmin;
+                        const deleteButton = canDelete
                             ? `<br><button onclick="window.deleteActivityFromMap(${activity.id})" class="delete-btn" style="background-color: #dc3545; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 12px;">🗑️ 削除</button>`
                             : '';
                         const popupContent = `
@@ -434,32 +522,34 @@ async function loadActivitiesOnMap() {
                             場所: ${activity.location}<br>
                             ${activity.memo ? `メモ: ${activity.memo}` : ''}${deleteButton}
                         `;
-                        const geoType = geoJSON.geometry && geoJSON.geometry.type;
+                        const geoType = geoJSON && geoJSON.geometry && geoJSON.geometry.type;
 
+                        const routeColor = getActivityColor(activity.id);
                         if (geoType === 'LineString') {
-                            // GPX軌跡はオレンジのポリラインで表示
-                            const layer = L.geoJSON(geoJSON, {
-                                style: { color: '#FF6B35', weight: 3, opacity: 0.85 }
+                            const layer = L.geoJSON(normalizeGeoJSON(geoJSON), {
+                                style: { color: routeColor, weight: 5, opacity: 0.9 }
                             }).addTo(map).bindPopup(popupContent);
                             activityMarkers.push(layer);
+                            activityLayerMap.set(activity.id, layer);
                         } else {
-                            // ポリゴンは濃い紫で表示
                             const polygon = L.geoJSON(geoJSON, {
                                 style: {
-                                    color: '#4A1A4A',
-                                    fillColor: '#663399',
+                                    color: routeColor,
+                                    fillColor: routeColor,
                                     weight: 2,
                                     opacity: 0.9,
-                                    fillOpacity: 0.5
+                                    fillOpacity: 0.3
                                 }
                             }).addTo(map).bindPopup(popupContent);
                             activityMarkers.push(polygon);
+                            activityLayerMap.set(activity.id, polygon);
                         }
                     } catch (err) {
                         console.error('座標データの解析エラー:', err);
                         // フォールバック: マーカー表示
                         if (activity.latitude && activity.longitude) {
-                            const deleteButton = currentUserId === activity.user_id 
+                            const canDelete = currentUserId === activity.user_id || currentUserIsAdmin;
+                            const deleteButton = canDelete
                                 ? `<br><button onclick="window.deleteActivityFromMap(${activity.id})" class="delete-btn" style="background-color: #dc3545; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 12px;">🗑️ 削除</button>`
                                 : '';
                             
@@ -477,7 +567,8 @@ async function loadActivitiesOnMap() {
                     }
                 } else if (activity.latitude && activity.longitude) {
                     // ポリゴンデータがない場合は従来通りマーカー表示
-                    const deleteButton = currentUserId === activity.user_id 
+                    const canDelete = currentUserId === activity.user_id || currentUserIsAdmin;
+                    const deleteButton = canDelete
                         ? `<br><button onclick="window.deleteActivityFromMap(${activity.id})" class="delete-btn" style="background-color: #dc3545; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 12px;">🗑️ 削除</button>`
                         : '';
                     
@@ -662,6 +753,62 @@ async function loadTeamActivities() {
     }
 }
 
+// 管理者用ユーザー一覧を読み込み
+async function loadAdminUsers() {
+    try {
+        const response = await fetchWithAuth('/admin/users');
+        if (response.ok) {
+            const users = await response.json();
+            displayAdminUsers(users);
+        } else {
+            const result = await response.json().catch(() => ({}));
+            showMessage(result.detail || 'ユーザー一覧の取得に失敗しました', 'error');
+        }
+    } catch (error) {
+        if (error.message !== 'Unauthorized') {
+            showMessage('ネットワークエラー', 'error');
+        }
+    }
+}
+
+function displayAdminUsers(users) {
+    const tbody = document.getElementById('admin-users-tbody');
+    if (!tbody) return;
+
+    tbody.innerHTML = '';
+
+    users.forEach(user => {
+        const row = tbody.insertRow();
+        const isAdminText = user.is_admin ? 'はい' : 'いいえ';
+        const actionText = user.is_admin ? '管理者解除' : '管理者付与';
+
+        row.innerHTML = `
+            <td>${user.username}</td>
+            <td>${user.email || ''}</td>
+            <td>${isAdminText}</td>
+            <td>${user.created_at ? new Date(user.created_at).toLocaleDateString('ja-JP') : ''}</td>
+            <td><button class="admin-toggle-btn" onclick="toggleAdminUser(${user.id})">${actionText}</button></td>
+        `;
+    });
+}
+
+window.toggleAdminUser = async function(userId) {
+    try {
+        const response = await fetchWithAuth(`/admin/users/${userId}/toggle-admin`, { method: 'POST' });
+        if (response.ok) {
+            showMessage('権限を更新しました', 'success');
+            loadAdminUsers();
+        } else {
+            const result = await response.json().catch(() => ({}));
+            showMessage(result.detail || '権限の更新に失敗しました', 'error');
+        }
+    } catch (error) {
+        if (error.message !== 'Unauthorized') {
+            showMessage('ネットワークエラー', 'error');
+        }
+    }
+};
+
 // 自分の活動記録表示
 function displayMyActivities(activities) {
     const tbody = document.getElementById('my-activities-tbody');
@@ -700,6 +847,7 @@ function displayMyActivities(activities) {
             <td>${createLocationDisplay(activity.latitude, activity.longitude, activity.location, activity.location_name)}</td>
             <td>${activity.memo || ''}</td>
         `;
+        row.appendChild(createColorCell(activity));
         row.appendChild(editCell);
 
         // モバイル用カード
@@ -722,12 +870,18 @@ function displayMyActivities(activities) {
             <div class="activity-details">場所: ${createLocationDisplay(activity.latitude, activity.longitude, activity.location, activity.location_name)}</div>
             ${activity.memo ? `<div class="activity-details">メモ: ${activity.memo}</div>` : ''}
         `;
-        
+
         const cardActions = document.createElement('div');
         cardActions.className = 'action-buttons';
+        if (activity.polygon_coordinates) {
+            const colorTd = createColorCell(activity);
+            colorTd.style.display = 'inline-block';
+            colorTd.title = 'ルート色（一時変更）';
+            cardActions.appendChild(colorTd);
+        }
         cardActions.appendChild(cardEditBtn);
         cardActions.appendChild(cardDeleteBtn);
-        
+
         card.appendChild(cardContent);
         card.appendChild(cardActions);
         mobileList.appendChild(card);
@@ -738,16 +892,22 @@ function displayMyActivities(activities) {
 function displayTeamActivities(activities) {
     const tbody = document.getElementById('team-activities-tbody');
     const mobileList = document.getElementById('team-activities-mobile');
-    
+
     tbody.innerHTML = '';
     mobileList.innerHTML = '';
-    
+
+    // 管理者の場合は「操作」列ヘッダーを表示
+    const actionHeader = document.getElementById('team-action-header');
+    if (actionHeader) {
+        actionHeader.classList.toggle('hidden', !currentUserIsAdmin);
+    }
+
     // 期間フィルタを適用
     const filteredActivities = activities.filter(activity => isDateInRange(activity.date));
-    
+
     filteredActivities.forEach(activity => {
         const date = new Date(activity.date).toLocaleDateString('ja-JP');
-        
+
         // デスクトップ用テーブル
         const row = tbody.insertRow();
         row.innerHTML = `
@@ -757,16 +917,48 @@ function displayTeamActivities(activities) {
             <td>${createLocationDisplay(activity.latitude, activity.longitude, activity.location, activity.location_name)}</td>
             <td>${activity.memo || ''}</td>
         `;
+        row.appendChild(createColorCell(activity));
+
+        if (currentUserIsAdmin) {
+            const td = document.createElement('td');
+            const deleteBtn = document.createElement('button');
+            deleteBtn.className = 'delete-btn';
+            deleteBtn.textContent = '削除';
+            deleteBtn.onclick = () => deleteActivity(activity.id);
+            td.appendChild(deleteBtn);
+            row.appendChild(td);
+        }
 
         // モバイル用カード
         const card = document.createElement('div');
         card.className = 'activity-card';
-        card.innerHTML = `
+
+        const cardContent = document.createElement('div');
+        cardContent.innerHTML = `
             <div class="activity-header">${activity.activity_type} - ${activity.username}</div>
             <div class="activity-details">日付: ${date}</div>
             <div class="activity-details">場所: ${createLocationDisplay(activity.latitude, activity.longitude, activity.location, activity.location_name)}</div>
             ${activity.memo ? `<div class="activity-details">メモ: ${activity.memo}</div>` : ''}
         `;
+        card.appendChild(cardContent);
+
+        if (activity.polygon_coordinates) {
+            const colorTd = createColorCell(activity);
+            colorTd.style.cssText = 'display:block;padding:4px 0;';
+            card.appendChild(colorTd);
+        }
+
+        if (currentUserIsAdmin) {
+            const cardActions = document.createElement('div');
+            cardActions.className = 'action-buttons';
+            const cardDeleteBtn = document.createElement('button');
+            cardDeleteBtn.className = 'delete-btn';
+            cardDeleteBtn.textContent = '削除';
+            cardDeleteBtn.onclick = () => deleteActivity(activity.id);
+            cardActions.appendChild(cardDeleteBtn);
+            card.appendChild(cardActions);
+        }
+
         mobileList.appendChild(card);
     });
 }
@@ -804,14 +996,14 @@ async function editActivity(id, activityType, location, date, memo, latitude, lo
     // ポリゴンデータがある場合は地図に復元
     if (polygonCoords && polygonCoords !== '' && polygonCoords !== 'null' && polygonCoords !== 'undefined') {
         try {
-            const geoJSON = JSON.parse(polygonCoords);
+            const geoJSON = normalizeGeoJSON(polygonCoords);
             currentPolygonGeoJSON = geoJSON;
             
             // 地図タブに切り替え後にポリゴンを復元
             switchTab('map-view');
 
             setTimeout(() => {
-                const geoType = geoJSON.geometry && geoJSON.geometry.type;
+                const geoType = geoJSON && geoJSON.geometry && geoJSON.geometry.type;
 
                 if (geoType === 'LineString') {
                     // GPX軌跡として復元
@@ -821,9 +1013,7 @@ async function editActivity(id, activityType, location, date, memo, latitude, lo
                     gpxMarkers.forEach(m => map.removeLayer(m));
                     gpxMarkers = [];
 
-                    gpxTrackLayer = L.polyline(latLngs, {
-                        color: '#FF6B35', weight: 4, opacity: 0.85
-                    }).addTo(map);
+                    gpxTrackLayer = L.polyline(latLngs, { color: getActivityColor(id), weight: 5, opacity: 0.9 }).addTo(map);
 
                     const startMarker = L.circleMarker(latLngs[0], {
                         radius: 8, fillColor: '#4CAF50', color: '#fff', weight: 2, fillOpacity: 1
@@ -883,6 +1073,7 @@ async function deleteActivity(id) {
         if (response.ok) {
             showMessage('記録を削除しました', 'success');
             loadMyActivities();
+            loadTeamActivities();
             loadActivitiesOnMap();
         } else {
             showMessage('削除に失敗しました', 'error');
@@ -1080,11 +1271,7 @@ function drawGpxTrack(points) {
     }
     currentPolygonGeoJSON = null;
 
-    gpxTrackLayer = L.polyline(points, {
-        color: '#FF6B35',
-        weight: 4,
-        opacity: 0.85
-    }).addTo(map);
+    gpxTrackLayer = L.polyline(points, GPX_TRACK_STYLE).addTo(map);
 
     const startMarker = L.circleMarker(points[0], {
         radius: 8, fillColor: '#4CAF50', color: '#fff', weight: 2, fillOpacity: 1
@@ -1302,6 +1489,14 @@ document.addEventListener('DOMContentLoaded', function() {
     loadMyActivities();
     // 地図上に既存の活動記録アイコンを表示
     loadActivitiesOnMap();
+    
+    // 管理者タブの可視性を初期化
+    getCurrentUser().then(() => {
+        const adminTab = document.getElementById('admin-tab');
+        if (adminTab) {
+            adminTab.classList.toggle('hidden', !currentUserIsAdmin);
+        }
+    });
     
     // 初期バリデーション実行
     setTimeout(() => {

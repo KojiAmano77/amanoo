@@ -40,6 +40,7 @@
             <button class="tab active" onclick="switchTab('map-view')">地図</button>
             <button class="tab" onclick="switchTab('my-activities')">自分の記録</button>
             <button class="tab" onclick="switchTab('team-activities')">支部記録</button>
+            <button id="admin-tab" class="tab hidden" onclick="switchTab('admin-users')">管理者メニュー</button>
         </div>
 
         <div class="tab-content">
@@ -104,6 +105,7 @@
                             <th>活動種別</th>
                             <th>場所</th>
                             <th>メモ</th>
+                            <th>ルート色</th>
                             <th>操作</th>
                         </tr>
                     </thead>
@@ -126,6 +128,8 @@
                             <th>活動種別</th>
                             <th>場所</th>
                             <th>メモ</th>
+                            <th>ルート色</th>
+                            <th id="team-action-header" class="hidden">操作</th>
                         </tr>
                     </thead>
                     <tbody id="team-activities-tbody">
@@ -134,6 +138,24 @@
 
                 <div class="mobile-activity-list" id="team-activities-mobile">
                 </div>
+            </div>
+
+            <div id="admin-users" class="hidden">
+                <h2>管理者メニュー</h2>
+                <p class="admin-hint">管理者のみが閲覧・操作できるユーザー一覧です。</p>
+                <table class="activities-table">
+                    <thead>
+                        <tr>
+                            <th>ユーザー名</th>
+                            <th>メールアドレス</th>
+                            <th>管理者</th>
+                            <th>登録日</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="admin-users-tbody">
+                    </tbody>
+                </table>
             </div>
 
         </div>

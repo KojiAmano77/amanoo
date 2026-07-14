@@ -1,4 +1,5 @@
-from sqlalchemy import create_engine, Column, Integer, String, DateTime, Text, ForeignKey, Float, Boolean
+from sqlalchemy import create_engine, Column, Integer, String, DateTime, Text, ForeignKey, Float, Boolean, inspect, text
+from sqlalchemy.dialects.mysql import MEDIUMTEXT
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 from datetime import datetime
@@ -23,6 +24,7 @@ class User(Base):
     username = Column(String(50), unique=True, index=True, nullable=False)
     email = Column(String(100), unique=True, index=True, nullable=False)
     password_hash = Column(String(255), nullable=False)
+    is_admin = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     
     activities = relationship("Activity", back_populates="user")
@@ -38,7 +40,8 @@ class Activity(Base):
     location_name = Column(String(255))                 # 逆ジオコーディングで取得した場所名
     latitude = Column(Float)                            # 緯度（中心点またはポイント）
     longitude = Column(Float)                           # 経度（中心点またはポイント）
-    polygon_coordinates = Column(Text)                  # GeoJSON形式のポリゴン座標データ
+    polygon_coordinates = Column(MEDIUMTEXT)             # GeoJSON形式のポリゴン座標データ
+    gpx_content = Column(MEDIUMTEXT)                    # GPXファイルの元データ
     date = Column(DateTime, nullable=False)             # 実施日
     memo = Column(Text)                                 # メモ
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -86,6 +89,24 @@ def create_tables():
     for attempt in range(max_retries):
         try:
             Base.metadata.create_all(bind=engine)
+            inspector = inspect(engine)
+            if "activities" in inspector.get_table_names():
+                activity_columns = {column["name"] for column in inspector.get_columns("activities")}
+                if "gpx_content" not in activity_columns:
+                    with engine.begin() as conn:
+                        conn.execute(text("ALTER TABLE activities ADD COLUMN gpx_content MEDIUMTEXT"))
+                else:
+                    # TEXT → MEDIUMTEXT へのアップグレード
+                    col_type = {c["name"]: c["type"] for c in inspector.get_columns("activities")}
+                    for col in ("gpx_content", "polygon_coordinates"):
+                        if col in col_type and "mediumtext" not in str(col_type[col]).lower():
+                            with engine.begin() as conn:
+                                conn.execute(text(f"ALTER TABLE activities MODIFY COLUMN {col} MEDIUMTEXT"))
+            if "users" in inspector.get_table_names():
+                user_columns = {column["name"] for column in inspector.get_columns("users")}
+                if "is_admin" not in user_columns:
+                    with engine.begin() as conn:
+                        conn.execute(text("ALTER TABLE users ADD COLUMN is_admin BOOLEAN NOT NULL DEFAULT FALSE"))
             print("Database tables created successfully!")
             return
         except Exception as e:

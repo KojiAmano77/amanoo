@@ -286,6 +286,22 @@ button:active {
     box-shadow: 0 0 10px rgba(0,0,0,0.1);
 }
 
+.admin-hint {
+    color: #666;
+    margin-bottom: 12px;
+}
+
+.admin-toggle-btn {
+    background-color: #007bff;
+    padding: 6px 10px;
+    font-size: 12px;
+    width: auto;
+}
+
+.admin-toggle-btn:hover {
+    background-color: #0056b3;
+}
+
 /* 地図用スタイル */
 .map-header {
     display: flex;

@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request, Depends, HTTPException, status, Form
+from fastapi import FastAPI, Request, Depends, HTTPException, status, Form, File, UploadFile
 from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse
@@ -6,15 +6,71 @@ from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
-from typing import List, Optional
+from typing import List, Optional, Any, Dict
 from pydantic import BaseModel, Field
 import os
 import secrets
 import uuid
+import json
+import xml.etree.ElementTree as ET
 
 from database import get_db, create_tables, User, Activity, PasswordResetToken, Event
 from auth import get_password_hash, verify_password, create_access_token, get_current_user
 from email_service import send_password_reset_email, send_password_changed_email
+
+def _parse_activity_date(date_value: Any) -> datetime:
+    if isinstance(date_value, datetime):
+        return date_value
+
+    if date_value is None:
+        raise HTTPException(status_code=400, detail="日付は必須です")
+
+    text_value = str(date_value).strip()
+    for fmt in ["%Y-%m-%d", "%Y/%m/%d", "%Y-%m-%d %H:%M:%S", "%Y/%m/%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S"]:
+        try:
+            return datetime.strptime(text_value, fmt)
+        except ValueError:
+            continue
+
+    try:
+        return datetime.fromisoformat(text_value)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="日付の形式が正しくありません") from exc
+
+
+def _extract_gpx_points(gpx_content: str) -> Optional[List[List[float]]]:
+    try:
+        root = ET.fromstring(gpx_content)
+    except ET.ParseError:
+        return None
+
+    points: List[List[float]] = []
+    for trkpt in root.findall(".//{*}trkpt"):
+        lat = trkpt.get("lat")
+        lon = trkpt.get("lon")
+        if lat and lon:
+            points.append([float(lon), float(lat)])
+
+    return points if points else None
+
+
+def _get_or_create_api_user(db: Session, requested_username: Optional[str]) -> User:
+    username = (requested_username or "API").strip() or "API"
+    user = db.query(User).filter(User.username == username).first()
+    if user:
+        return user
+
+    email_local = username.lower().replace(" ", "_")
+    user = User(
+        username=username,
+        email=f"{email_local}@api.local",
+        password_hash=get_password_hash(str(uuid.uuid4()))
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
+
 
 # Pydantic models for Calendar Events
 class EventBase(BaseModel):
@@ -33,6 +89,24 @@ class EventSchema(EventBase):
 
     class Config:
         from_attributes = True
+
+
+class FormActivityRequest(BaseModel):
+    user_id: Optional[str] = None
+    担当者: Optional[str] = None
+    activity_type: Optional[str] = None
+    活動種別: Optional[str] = None
+    date: Optional[str] = None
+    日付: Optional[str] = None
+    location: Optional[str] = None
+    場所: Optional[str] = None
+    memo: Optional[str] = None
+    メモ: Optional[str] = None
+    gpx_file: Optional[str] = None
+    gpx_file_content: Optional[str] = None
+    gpx_content: Optional[str] = None
+    gpx: Optional[str] = None
+
 
 app = FastAPI(
     title="愛知第12支部活動記録システム",
@@ -199,6 +273,81 @@ async def reset_password(
     
     return {"message": "パスワードが正常に変更されました"}
 
+# Googleフォーム/Apps Script用の登録API
+@app.post("/api/forms/activity", status_code=status.HTTP_201_CREATED)
+async def create_activity_from_form_api(
+    payload: FormActivityRequest,
+    db: Session = Depends(get_db)
+):
+    user_id_value = None
+    for key in ["user_id", "担当者(ユーザーID)", "担当者", "responsible_person"]:
+        value = getattr(payload, key, None)
+        if value not in (None, ""):
+            user_id_value = value
+            break
+
+    activity_type = payload.activity_type or payload.活動種別
+    date_value = payload.date or payload.日付
+    location = payload.location or payload.場所
+    memo = payload.memo or payload.メモ or ""
+
+    if not activity_type:
+        raise HTTPException(status_code=400, detail="活動種別は必須です")
+    if not date_value:
+        raise HTTPException(status_code=400, detail="日付は必須です")
+    if not location:
+        raise HTTPException(status_code=400, detail="場所は必須です")
+
+    gpx_content = None
+    gpx_filename = None
+    for key in ["gpx_file", "GPXファイルの登録", "gpx_file_content", "gpx_content", "gpx", "gpx_file_registration"]:
+        value = getattr(payload, key, None)
+        if value not in (None, ""):
+            gpx_content = str(value)
+            break
+
+    activity_date = _parse_activity_date(date_value)
+    user = _get_or_create_api_user(db, str(user_id_value) if user_id_value is not None else "API")
+
+    polygon_coordinates = None
+    latitude = None
+    longitude = None
+    if gpx_content:
+        points = _extract_gpx_points(gpx_content)
+        if points:
+            polygon_coordinates = json.dumps({
+                "type": "Feature",
+                "geometry": { "type": "LineString", "coordinates": points },
+                "properties": {}
+            })
+            latitude = points[0][1]
+            longitude = points[0][0]
+
+    db_activity = Activity(
+        user_id=user.id,
+        activity_type=str(activity_type),
+        location=str(location),
+        location_name=None,
+        latitude=latitude,
+        longitude=longitude,
+        polygon_coordinates=polygon_coordinates,
+        gpx_content=gpx_content,
+        date=activity_date,
+        memo=str(memo)
+    )
+    db.add(db_activity)
+    db.commit()
+    db.refresh(db_activity)
+
+    return {
+        "message": "活動記録を登録しました",
+        "activity_id": db_activity.id,
+        "user_id": user.username,
+        "gpx_saved": bool(gpx_content),
+        "gpx_filename": gpx_filename,
+    }
+
+
 # 活動記録作成
 @app.post("/activities")
 async def create_activity(
@@ -266,7 +415,49 @@ async def get_current_user_info(current_user: User = Depends(get_current_user)):
     return {
         "id": current_user.id,
         "username": current_user.username,
-        "email": current_user.email
+        "email": current_user.email,
+        "is_admin": current_user.is_admin
+    }
+
+@app.get("/admin/users")
+async def list_admin_users(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="管理者権限が必要です")
+
+    users = db.query(User).order_by(User.id).all()
+    return [
+        {
+            "id": user.id,
+            "username": user.username,
+            "email": user.email,
+            "is_admin": user.is_admin,
+            "created_at": user.created_at.isoformat() if user.created_at else None,
+        }
+        for user in users
+    ]
+
+@app.post("/admin/users/{user_id}/toggle-admin")
+async def toggle_admin_user(
+    user_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="管理者権限が必要です")
+
+    target_user = db.query(User).filter(User.id == user_id).first()
+    if not target_user:
+        raise HTTPException(status_code=404, detail="ユーザーが見つかりません")
+
+    target_user.is_admin = not target_user.is_admin
+    db.commit()
+    return {
+        "id": target_user.id,
+        "username": target_user.username,
+        "is_admin": target_user.is_admin
     }
 
 # すべての活動記録を取得（支部全体）
@@ -309,13 +500,12 @@ async def update_activity(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    activity = db.query(Activity).filter(
-        Activity.id == activity_id, 
-        Activity.user_id == current_user.id
-    ).first()
+    activity = db.query(Activity).filter(Activity.id == activity_id).first()
     
     if not activity:
         raise HTTPException(status_code=404, detail="Activity not found")
+    if activity.user_id != current_user.id and not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="この記録を編集する権限がありません")
     
     activity.activity_type = activity_type
     activity.location = location
@@ -335,13 +525,12 @@ async def delete_activity(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    activity = db.query(Activity).filter(
-        Activity.id == activity_id, 
-        Activity.user_id == current_user.id
-    ).first()
+    activity = db.query(Activity).filter(Activity.id == activity_id).first()
     
     if not activity:
         raise HTTPException(status_code=404, detail="Activity not found")
+    if activity.user_id != current_user.id and not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="この記録を削除する権限がありません")
     
     db.delete(activity)
     db.commit()
@@ -351,7 +540,7 @@ async def delete_activity(
 # メインページ
 @app.get("/", response_class=HTMLResponse)
 async def root(request: Request):
-    return templates.TemplateResponse("calendar.html", {"request": request})
+    return templates.TemplateResponse("activity.html", {"request": request})
 
 @app.get("/activity", response_class=HTMLResponse)
 async def activity_page(request: Request):
