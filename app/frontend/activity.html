@@ -13,7 +13,7 @@
     <div class="container">
         <div class="header">
             <h1>愛知第12支部活動記録</h1>
-            <a href="/" id="calendar-link" title="カレンダー">
+            <a href="/calendar" id="calendar-link" title="カレンダー">
                 <i class="fas fa-calendar-alt"></i>
             </a>
             <button class="logout-btn" onclick="logout()">ログアウト</button>
@@ -50,10 +50,12 @@
             <div id="map-view">
                 <div class="map-header">
                     <h2>エリアを描画して記録作成</h2>
-                    <button id="current-location-btn" class="current-location-btn" onclick="moveToCurrentLocation()">📍 現在地に移動</button>
-                    <button class="gpx-upload-btn" onclick="document.getElementById('gpx-file-input').click()">📂 GPXファイルを読み込む</button>
+                    <button id="current-location-btn" class="current-location-btn" onclick="moveToCurrentLocation()">📍 現在地</button>
+                    <button class="gpx-upload-btn" onclick="document.getElementById('gpx-file-input').click()">📂 GPX読込</button>
                     <input type="file" id="gpx-file-input" accept=".gpx" style="display:none" onchange="handleGpxUpload(event)">
-                    <button id="gpx-clear-btn" class="gpx-clear-btn hidden" onclick="clearGpxTrack()">✕ 軌跡を消去</button>
+                    <button id="gpx-clear-btn" class="gpx-clear-btn hidden" onclick="clearGpxTrack()">✕ 軌跡消去</button>
+                    <button id="pin-mode-btn" class="gpx-upload-btn" onclick="togglePinMode()">📌 地点登録</button>
+                    <button id="pin-clear-btn" class="gpx-clear-btn hidden" onclick="clearPin()">✕ ピン消去</button>
                 </div>
                 
                 <form id="activity-form">
@@ -76,7 +78,7 @@
                     <div class="form-row keep-horizontal">
                         <div class="form-field">
                             <label for="location">場所</label>
-                            <div id="location" class="location-display">地図でエリアを描画してください</div>
+                            <div id="location" class="location-display">エリア描画・GPX読み込み・ピン登録のいずれかをしてください</div>
                         </div>
                         <div class="form-field">
                             <label for="memo">メモ</label>

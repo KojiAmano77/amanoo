@@ -10,6 +10,8 @@ let currentUserId = null;
 let currentUserIsAdmin = false;
 let gpxTrackLayer = null;
 let gpxMarkers = [];
+let currentPinMarker = null;
+let pinModeActive = false;
 
 // 軌跡・エリアの配色パレット（活動IDに応じて動的に割り当て）
 const ROUTE_COLORS = [
@@ -192,7 +194,8 @@ function initMaps() {
     });
     
     function handlePolygonCreated(layer) {
-        // GPXトラックが表示されている場合は削除（相互排他）
+        // ピン・GPXが表示されている場合は削除（相互排他）
+        if (currentPinMarker) clearPin();
         if (gpxTrackLayer || gpxMarkers.length > 0) {
             clearGpxTrack();
         }
@@ -316,7 +319,7 @@ function moveToCurrentLocation() {
 
     // ボタンを無効化して処理中表示
     button.disabled = true;
-    button.textContent = '📍 現在地取得中...';
+    button.textContent = '📍 取得中...';
 
     navigator.geolocation.getCurrentPosition(
         function(position) {
@@ -347,7 +350,7 @@ function moveToCurrentLocation() {
             
             // ボタンを元に戻す
             button.disabled = false;
-            button.textContent = '📍 現在地に移動';
+            button.textContent = '📍 現在地';
         },
         function(error) {
             let errorMessage = '現在地の取得に失敗しました';
@@ -373,7 +376,7 @@ function moveToCurrentLocation() {
             
             // ボタンを元に戻す
             button.disabled = false;
-            button.textContent = '📍 現在地に移動';
+            button.textContent = '📍 現在地';
         },
         {
             enableHighAccuracy: true,
@@ -600,8 +603,8 @@ function validateFormAndUpdateButton() {
     const hasLocation = locationDisplay.classList.contains('selected');
     const submitBtn = document.querySelector('.submit-btn');
     
-    // ポリゴンまたはGPXトラックの存在確認
-    const hasPolygonData = currentPolygonGeoJSON !== null;
+    // ポリゴン・GPXトラック・ピンのいずれかの存在確認
+    const hasPolygonData = currentPolygonGeoJSON !== null || currentPinMarker !== null;
     
     // 住所取得が完了しているかチェック（「住所取得中...」でない）
     const isLocationReady = locationDisplay.textContent !== '住所取得中...';
@@ -618,7 +621,7 @@ function validateFormAndUpdateButton() {
     } else {
         let message = '必須項目を入力してください';
         if (!hasPolygonData) {
-            message = 'エリアを地図上に描画してください';
+            message = 'エリア描画・GPX読み込み・ピン登録のいずれかをしてください';
         } else if (!isLocationReady) {
             message = '住所取得中です...';
         } else if (!activityType) {
@@ -698,7 +701,14 @@ function setupActivityForm() {
                         drawnItems.removeLayer(currentPolygon);
                         currentPolygon = null;
                     }
-                    
+
+                    // ピンをクリア
+                    if (currentPinMarker) {
+                        map.removeLayer(currentPinMarker);
+                        currentPinMarker = null;
+                        document.getElementById('pin-clear-btn').classList.add('hidden');
+                    }
+
                     loadMyActivities();
                     loadActivitiesOnMap();
                     
@@ -1056,6 +1066,23 @@ async function editActivity(id, activityType, location, date, memo, latitude, lo
         }
     }
     
+    // ポリゴンもGPXもない場合、ピン活動として復元
+    if (latitude && longitude) {
+        switchTab('map-view');
+        setTimeout(() => {
+            if (currentPinMarker) map.removeLayer(currentPinMarker);
+            currentPinMarker = L.circleMarker([latitude, longitude], {
+                radius: 10, fillColor: '#E74C3C', color: '#C0392B', weight: 2, fillOpacity: 0.9
+            }).addTo(map).bindPopup('📌 地点登録中');
+            selectedLat = latitude;
+            selectedLng = longitude;
+            map.setView([latitude, longitude], 17);
+            document.getElementById('pin-clear-btn').classList.remove('hidden');
+            validateFormAndUpdateButton();
+        }, 300);
+        return;
+    }
+
     switchTab('map-view');
 }
 
@@ -1264,10 +1291,15 @@ function drawGpxTrack(points) {
     gpxMarkers.forEach(m => map.removeLayer(m));
     gpxMarkers = [];
 
-    // ポリゴンが描かれている場合は削除（相互排他）
+    // ポリゴン・ピンが描かれている場合は削除（相互排他）
     if (currentPolygon) {
         drawnItems.removeLayer(currentPolygon);
         currentPolygon = null;
+    }
+    if (currentPinMarker) {
+        map.removeLayer(currentPinMarker);
+        currentPinMarker = null;
+        document.getElementById('pin-clear-btn').classList.add('hidden');
     }
     currentPolygonGeoJSON = null;
 
@@ -1358,6 +1390,84 @@ function clearGpxTrack() {
     document.getElementById('gpx-info').classList.add('hidden');
     document.getElementById('gpx-clear-btn').classList.add('hidden');
 
+    validateFormAndUpdateButton();
+}
+
+// ピンモード切り替え
+function togglePinMode() {
+    pinModeActive = !pinModeActive;
+    const btn = document.getElementById('pin-mode-btn');
+    if (pinModeActive) {
+        btn.textContent = '🖱️ 地図をタップして指定';
+        btn.style.cssText = 'background:#e74c3c;color:#fff;';
+        map.getContainer().style.cursor = 'crosshair';
+        map.on('click', handleMapClickForPin);
+        // 他の要素を消去（相互排他）
+        if (currentPolygon) { drawnItems.removeLayer(currentPolygon); currentPolygon = null; currentPolygonGeoJSON = null; }
+        if (gpxTrackLayer || gpxMarkers.length > 0) clearGpxTrack();
+    } else {
+        btn.textContent = '📌 地点登録';
+        btn.style.cssText = '';
+        map.getContainer().style.cursor = '';
+        map.off('click', handleMapClickForPin);
+    }
+}
+
+function handleMapClickForPin(e) {
+    const { lat, lng } = e.latlng;
+
+    if (currentPinMarker) map.removeLayer(currentPinMarker);
+
+    currentPinMarker = L.circleMarker([lat, lng], {
+        radius: 10,
+        fillColor: '#E74C3C',
+        color: '#C0392B',
+        weight: 2,
+        fillOpacity: 0.9
+    }).addTo(map).bindPopup('📌 地点登録中');
+
+    selectedLat = lat;
+    selectedLng = lng;
+
+    const locationDisplay = document.getElementById('location');
+    locationDisplay.textContent = '住所取得中...';
+    locationDisplay.className = 'location-display';
+    validateFormAndUpdateButton();
+
+    getLocationName(lat, lng)
+        .then(name => {
+            currentLocationName = name;
+            locationDisplay.textContent = name;
+            locationDisplay.className = 'location-display selected';
+            validateFormAndUpdateButton();
+        })
+        .catch(() => {
+            const fallback = `緯度: ${lat.toFixed(5)}, 経度: ${lng.toFixed(5)}`;
+            currentLocationName = fallback;
+            locationDisplay.textContent = fallback;
+            locationDisplay.className = 'location-display selected';
+            validateFormAndUpdateButton();
+        });
+
+    // クリック後はモードを解除
+    if (pinModeActive) togglePinMode();
+    document.getElementById('pin-clear-btn').classList.remove('hidden');
+}
+
+function clearPin() {
+    if (currentPinMarker) {
+        map.removeLayer(currentPinMarker);
+        currentPinMarker = null;
+    }
+    selectedLat = null;
+    selectedLng = null;
+    currentLocationName = null;
+
+    const locationDisplay = document.getElementById('location');
+    locationDisplay.textContent = 'エリア描画・GPX読み込み・ピン登録のいずれかをしてください';
+    locationDisplay.className = 'location-display';
+
+    document.getElementById('pin-clear-btn').classList.add('hidden');
     validateFormAndUpdateButton();
 }
 
