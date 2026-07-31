@@ -350,7 +350,7 @@ function moveToCurrentLocation() {
             
             // ボタンを元に戻す
             button.disabled = false;
-            button.textContent = '📍 現在地';
+            button.textContent = '📍 現在地に移動';
         },
         function(error) {
             let errorMessage = '現在地の取得に失敗しました';
@@ -376,7 +376,7 @@ function moveToCurrentLocation() {
             
             // ボタンを元に戻す
             button.disabled = false;
-            button.textContent = '📍 現在地';
+            button.textContent = '📍 現在地に移動';
         },
         {
             enableHighAccuracy: true,
@@ -1520,38 +1520,38 @@ function applyDateFilter() {
     showMessage('期間フィルタを適用しました', 'success');
 }
 
-// 期間フィルタをリセット
+// 期間フィルタをリセット（デフォルト範囲で有効化）
 function resetDateFilter() {
     setDefaultDateRange();
-    
-    currentDateFilter = {
-        startDate: null,
-        endDate: null,
-        isActive: false
-    };
-    
     // データを再読み込み
     refreshAllData();
     showMessage('期間フィルタをリセットしました', 'success');
 }
 
-// デフォルト日付範囲を設定
+// デフォルト日付範囲を設定し、フィルターを有効化
 function setDefaultDateRange() {
     const today = new Date();
-    
+
     // 開始日: 1か月前
     const oneMonthAgo = new Date(today);
     oneMonthAgo.setMonth(today.getMonth() - 1);
-    const startDateString = oneMonthAgo.getFullYear() + '-' + 
-        String(oneMonthAgo.getMonth() + 1).padStart(2, '0') + '-' + 
+    const startDateString = oneMonthAgo.getFullYear() + '-' +
+        String(oneMonthAgo.getMonth() + 1).padStart(2, '0') + '-' +
         String(oneMonthAgo.getDate()).padStart(2, '0');
     document.getElementById('start-date').value = startDateString;
-    
+
     // 終了日: 今日の日付
-    const todayString = today.getFullYear() + '-' + 
-        String(today.getMonth() + 1).padStart(2, '0') + '-' + 
+    const todayString = today.getFullYear() + '-' +
+        String(today.getMonth() + 1).padStart(2, '0') + '-' +
         String(today.getDate()).padStart(2, '0');
     document.getElementById('end-date').value = todayString;
+
+    // フィルターをデフォルト範囲で有効化（起動時・リセット時も適用）
+    currentDateFilter = {
+        startDate: startDateString,
+        endDate: todayString,
+        isActive: true
+    };
 }
 
 // すべてのデータを再読み込み

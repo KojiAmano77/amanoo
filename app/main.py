@@ -60,10 +60,9 @@ def _get_or_create_api_user(db: Session, requested_username: Optional[str]) -> U
     if user:
         return user
 
-    email_local = username.lower().replace(" ", "_")
     user = User(
         username=username,
-        email=f"{email_local}@api.local",
+        email=None,
         password_hash=get_password_hash(str(uuid.uuid4()))
     )
     db.add(user)
