@@ -614,3 +614,22 @@ button:active {
     }
 }
 
+/* 学区ラベル */
+.district-label {
+    font-size: 10px;
+    font-weight: bold;
+    color: #333;
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    white-space: nowrap;
+}
+
+/* トグルON状態のボタン */
+.gpx-upload-btn.active {
+    background-color: #4caf50;
+}
+.gpx-upload-btn.active:hover {
+    background-color: #388e3c;
+}
+

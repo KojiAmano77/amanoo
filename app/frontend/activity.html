@@ -50,12 +50,13 @@
             <div id="map-view">
                 <div class="map-header">
                     <h2>エリアを描画して記録作成</h2>
-                    <button id="current-location-btn" class="current-location-btn" onclick="moveToCurrentLocation()">📍 現在地</button>
+                    <button id="current-location-btn" class="current-location-btn" onclick="moveToCurrentLocation()">📍現在地へ</button>
                     <button class="gpx-upload-btn" onclick="document.getElementById('gpx-file-input').click()">📂 GPX読込</button>
                     <input type="file" id="gpx-file-input" accept=".gpx" style="display:none" onchange="handleGpxUpload(event)">
                     <button id="gpx-clear-btn" class="gpx-clear-btn hidden" onclick="clearGpxTrack()">✕ 軌跡消去</button>
                     <button id="pin-mode-btn" class="gpx-upload-btn" onclick="togglePinMode()">📌 地点登録</button>
                     <button id="pin-clear-btn" class="gpx-clear-btn hidden" onclick="clearPin()">✕ ピン消去</button>
+                    <button id="district-toggle-btn" class="gpx-upload-btn" onclick="toggleSchoolDistricts()">🏫境界表示</button>
                 </div>
                 
                 <form id="activity-form">
@@ -165,6 +166,7 @@
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
-    <script src="/static/js/activity.js?v=7"></script>
+    <script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
+    <script src="/static/js/activity.js?v=8"></script>
 </body>
 </html>

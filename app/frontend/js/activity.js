@@ -13,6 +13,13 @@ let gpxMarkers = [];
 let currentPinMarker = null;
 let pinModeActive = false;
 
+// 学区レイヤー
+let schoolDistrictLayer = null;
+let schoolDistrictsVisible = false;
+let schoolDistrictData = null;
+let cachedAllActivities = [];
+const DISTRICT_LABEL_MIN_ZOOM = 13; // これ以上のズームでのみ学校名を表示
+
 // 軌跡・エリアの配色パレット（活動IDに応じて動的に割り当て）
 const ROUTE_COLORS = [
     '#E74C3C', // 赤
@@ -504,7 +511,8 @@ async function loadActivitiesOnMap() {
         
         if (response.ok) {
             const activities = await response.json();
-            
+            cachedAllActivities = activities;
+
             // 期間フィルタを適用
             const filteredActivities = activities.filter(activity => isDateInRange(activity.date));
             
@@ -1581,6 +1589,121 @@ function isDateInRange(dateString) {
     return activityDateOnly >= startDateOnly && activityDateOnly <= endDateOnly;
 }
 
+// --- 小学校区レイヤー ---
+
+function getDistrictNameKey(geojson) {
+    const sample = geojson.features && geojson.features[0];
+    if (!sample) return 'name';
+    const props = sample.properties;
+    if (props.A27_007 !== undefined) return 'A27_007'; // MLIT A27: 小学校名
+    if (props.name !== undefined) return 'name';
+    return Object.keys(props)[0] || 'name';
+}
+
+function computeDistrictCoverage(geojson, activities) {
+    const nameKey = getDistrictNameKey(geojson);
+    const countMap = {};
+    geojson.features.forEach(f => {
+        countMap[f.properties[nameKey] || '不明'] = 0;
+    });
+
+    activities.forEach(act => {
+        if (!act.polygon_coordinates) return;
+        let geo;
+        try { geo = JSON.parse(act.polygon_coordinates); } catch(e) { return; }
+        const geom = geo.geometry || geo;
+        if (!geom || geom.type !== 'LineString') return;
+
+        const coords = geom.coordinates;
+        // 最大50点サンプリングしてパフォーマンスを確保
+        const step = Math.max(1, Math.floor(coords.length / 50));
+        const hitDistricts = new Set();
+
+        for (let i = 0; i < coords.length; i += step) {
+            const pt = turf.point(coords[i]);
+            geojson.features.forEach(f => {
+                const name = f.properties[nameKey] || '不明';
+                if (!hitDistricts.has(name) && turf.booleanPointInPolygon(pt, f)) {
+                    hitDistricts.add(name);
+                    countMap[name]++;
+                }
+            });
+        }
+    });
+    return { countMap, nameKey };
+}
+
+function districtFillColor(count) {
+    if (count === 0) return '#e0e0e0'; // グレー：未カバー
+    if (count <= 2)  return '#fff176'; // 黄：低カバー
+    return '#81c784';                  // 緑：カバー済み
+}
+
+function updateDistrictLabels() {
+    const show = map.getZoom() >= DISTRICT_LABEL_MIN_ZOOM;
+    document.querySelectorAll('.district-label').forEach(el => {
+        el.style.display = show ? '' : 'none';
+    });
+}
+
+function renderSchoolDistricts() {
+    const geojson = schoolDistrictData;
+    const { countMap, nameKey } = computeDistrictCoverage(geojson, cachedAllActivities);
+
+    schoolDistrictLayer = L.geoJSON(geojson, {
+        style: feature => {
+            const name = feature.properties[nameKey] || '不明';
+            const fillColor = districtFillColor(countMap[name] || 0);
+            return { color: '#555', weight: 1.5, fillColor, fillOpacity: 0.4 };
+        },
+        onEachFeature: (feature, layer) => {
+            const name = feature.properties[nameKey] || '不明';
+            const count = countMap[name] || 0;
+            layer.bindTooltip(name, {
+                permanent: true,
+                direction: 'center',
+                className: 'district-label'
+            });
+            layer.bindPopup(`<b>${name}</b><br>通過活動数: ${count}件`);
+        }
+    }).addTo(map);
+
+    map.on('zoomend', updateDistrictLabels);
+    updateDistrictLabels();
+}
+
+async function toggleSchoolDistricts() {
+    if (!schoolDistrictsVisible) {
+        if (!schoolDistrictData) {
+            try {
+                const res = await fetch('/static/school_districts.geojson');
+                if (!res.ok) {
+                    showMessage('学区データが見つかりません。school_districts.geojsonを配置してください。', 'error');
+                    return;
+                }
+                schoolDistrictData = await res.json();
+            } catch (e) {
+                showMessage('学区データの読み込みに失敗しました。', 'error');
+                return;
+            }
+        }
+        if (schoolDistrictLayer) {
+            schoolDistrictLayer.addTo(map);
+            map.on('zoomend', updateDistrictLabels);
+            updateDistrictLabels();
+        } else {
+            renderSchoolDistricts();
+        }
+        schoolDistrictsVisible = true;
+        document.getElementById('district-toggle-btn').classList.add('active');
+    } else {
+        if (schoolDistrictLayer) map.removeLayer(schoolDistrictLayer);
+        map.off('zoomend', updateDistrictLabels);
+        schoolDistrictsVisible = false;
+        document.getElementById('district-toggle-btn').classList.remove('active');
+    }
+}
+
 // 初期化
 document.addEventListener('DOMContentLoaded', function() {
     // 今日の日付をデフォルトに設定
@@ -1597,8 +1720,8 @@ document.addEventListener('DOMContentLoaded', function() {
     
     initMaps();
     loadMyActivities();
-    // 地図上に既存の活動記録アイコンを表示
-    loadActivitiesOnMap();
+    // 地図上に既存の活動記録アイコンを表示し、完了後に学区レイヤーをON
+    loadActivitiesOnMap().then(() => toggleSchoolDistricts());
     
     // 管理者タブの可視性を初期化
     getCurrentUser().then(() => {
