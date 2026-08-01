@@ -1650,7 +1650,14 @@ function renderSchoolDistricts() {
     const geojson = schoolDistrictData;
     const { countMap, nameKey } = computeDistrictCoverage(geojson, cachedAllActivities);
 
+    // GPX軌跡（overlayPane z:400）より下のペインに配置してクリックを通過させる
+    if (!map.getPane('districtPane')) {
+        map.createPane('districtPane');
+        map.getPane('districtPane').style.zIndex = 350;
+    }
+
     schoolDistrictLayer = L.geoJSON(geojson, {
+        pane: 'districtPane',
         style: feature => {
             const name = feature.properties[nameKey] || '不明';
             const fillColor = districtFillColor(countMap[name] || 0);
