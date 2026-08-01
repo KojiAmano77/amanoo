@@ -108,6 +108,7 @@
                             <th>活動種別</th>
                             <th>場所</th>
                             <th>メモ</th>
+                            <th>距離</th>
                             <th>ルート色</th>
                             <th>操作</th>
                         </tr>
@@ -121,7 +122,10 @@
             </div>
 
             <div id="team-activities" class="hidden">
-                <h2>支部全体の活動記録</h2>
+                <div class="section-header">
+                    <h2>支部全体の活動記録</h2>
+                    <input type="search" id="team-search" class="team-search-input" placeholder="担当者・活動種別・メモで検索…" oninput="filterTeamActivities(this.value)">
+                </div>
                 
                 <table class="activities-table">
                     <thead>
@@ -131,6 +135,7 @@
                             <th>活動種別</th>
                             <th>場所</th>
                             <th>メモ</th>
+                            <th>距離</th>
                             <th>ルート色</th>
                             <th id="team-action-header" class="hidden">操作</th>
                         </tr>

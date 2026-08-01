@@ -614,6 +614,33 @@ button:active {
     }
 }
 
+/* 支部記録 セクションヘッダー（タイトル＋検索ボックスを横並び） */
+.section-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+}
+.section-header h2 {
+    margin: 0;
+    white-space: nowrap;
+}
+.team-search-input {
+    flex: 1;
+    min-width: 160px;
+    max-width: 320px;
+    padding: 6px 10px;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    font-size: 14px;
+    outline: none;
+}
+.team-search-input:focus {
+    border-color: #2196F3;
+    box-shadow: 0 0 0 2px rgba(33,150,243,0.2);
+}
+
 /* 学区ラベル */
 .district-label {
     font-size: 10px;
@@ -631,5 +658,37 @@ button:active {
 }
 .gpx-upload-btn.active:hover {
     background-color: #388e3c;
+}
+
+/* 地図全画面表示 */
+#map.map-fullscreen {
+    position: fixed !important;
+    top: 0 !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    width: 100vw !important;
+    height: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border-radius: 0 !important;
+    z-index: 10000 !important;
+}
+
+.map-fullscreen-btn {
+    font-size: 18px;
+    width: 34px;
+    height: 34px;
+    background: #2196F3 !important;
+    color: white;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+}
+.map-fullscreen-btn:hover {
+    background: #1976D2 !important;
 }
 

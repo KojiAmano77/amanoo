@@ -12,6 +12,7 @@ import os
 import secrets
 import uuid
 import json
+import math
 import xml.etree.ElementTree as ET
 
 from database import get_db, create_tables, User, Activity, PasswordResetToken, Event
@@ -36,6 +37,22 @@ def _parse_activity_date(date_value: Any) -> datetime:
         return datetime.fromisoformat(text_value)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail="日付の形式が正しくありません") from exc
+
+
+def _calculate_distance_km(coordinates: List[List[float]]) -> Optional[float]:
+    if not coordinates or len(coordinates) < 2:
+        return None
+    R = 6371
+    total = 0.0
+    for i in range(1, len(coordinates)):
+        lon1, lat1 = coordinates[i-1][0], coordinates[i-1][1]
+        lon2, lat2 = coordinates[i][0], coordinates[i][1]
+        dlat = math.radians(lat2 - lat1)
+        dlon = math.radians(lon2 - lon1)
+        a = (math.sin(dlat/2)**2
+             + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon/2)**2)
+        total += R * 2 * math.asin(math.sqrt(a))
+    return round(total, 2)
 
 
 def _extract_gpx_points(gpx_content: str) -> Optional[List[List[float]]]:
@@ -311,6 +328,7 @@ async def create_activity_from_form_api(
     polygon_coordinates = None
     latitude = None
     longitude = None
+    distance_km = None
     if gpx_content:
         points = _extract_gpx_points(gpx_content)
         if points:
@@ -321,6 +339,7 @@ async def create_activity_from_form_api(
             })
             latitude = points[0][1]
             longitude = points[0][0]
+            distance_km = _calculate_distance_km(points)
 
     db_activity = Activity(
         user_id=user.id,
@@ -332,7 +351,8 @@ async def create_activity_from_form_api(
         polygon_coordinates=polygon_coordinates,
         gpx_content=gpx_content,
         date=activity_date,
-        memo=str(memo)
+        memo=str(memo),
+        distance_km=distance_km
     )
     db.add(db_activity)
     db.commit()
@@ -362,11 +382,17 @@ async def create_activity(
     db: Session = Depends(get_db)
 ):
     activity_date = datetime.fromisoformat(date)
-    
-    # デバッグ用ログ
-    print(f"受信したpolygon_coordinates: {polygon_coordinates}")
-    print(f"polygon_coordinatesの型: {type(polygon_coordinates)}")
-    
+
+    distance_km = None
+    if polygon_coordinates:
+        try:
+            geo = json.loads(polygon_coordinates)
+            geom = geo.get("geometry", geo)
+            if geom.get("type") == "LineString":
+                distance_km = _calculate_distance_km(geom["coordinates"])
+        except Exception:
+            pass
+
     db_activity = Activity(
         user_id=current_user.id,
         activity_type=activity_type,
@@ -376,7 +402,8 @@ async def create_activity(
         longitude=longitude,
         polygon_coordinates=polygon_coordinates,
         date=activity_date,
-        memo=memo
+        memo=memo,
+        distance_km=distance_km
     )
     db.add(db_activity)
     db.commit()
@@ -403,6 +430,7 @@ async def get_activities(
             "polygon_coordinates": activity.polygon_coordinates,
             "date": activity.date.isoformat(),
             "memo": activity.memo,
+            "distance_km": activity.distance_km,
             "created_at": activity.created_at.isoformat()
         }
         for activity in activities
@@ -479,6 +507,7 @@ async def get_all_activities(
             "polygon_coordinates": activity.polygon_coordinates,
             "date": activity.date.isoformat(),
             "memo": activity.memo,
+            "distance_km": activity.distance_km,
             "created_at": activity.created_at.isoformat()
         }
         for activity in activities

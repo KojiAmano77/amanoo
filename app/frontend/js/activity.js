@@ -18,6 +18,7 @@ let schoolDistrictLayer = null;
 let schoolDistrictsVisible = false;
 let schoolDistrictData = null;
 let cachedAllActivities = [];
+let cachedFilteredActivities = [];
 const DISTRICT_LABEL_MIN_ZOOM = 13; // これ以上のズームでのみ学校名を表示
 
 // 軌跡・エリアの配色パレット（活動IDに応じて動的に割り当て）
@@ -38,6 +39,8 @@ const ROUTE_COLORS = [
 
 const activityColorMap = new Map(); // activityId → 現在の色
 const activityLayerMap = new Map(); // activityId → Leafletレイヤー
+
+const GPX_TRACK_STYLE = { color: '#FF6600', weight: 4, opacity: 0.85 }; // GPXプレビュー軌跡スタイル
 
 function getActivityColor(activityId) {
     if (activityColorMap.has(activityId)) {
@@ -144,6 +147,16 @@ L.Icon.Default.mergeOptions({
     iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png',
     shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
 });
+
+// 地図全画面トグル
+function toggleMapFullscreen() {
+    const mapEl = document.getElementById('map');
+    const btn = document.querySelector('.map-fullscreen-btn');
+    const isFullscreen = mapEl.classList.toggle('map-fullscreen');
+    btn.innerHTML = isFullscreen ? '✕' : '⛶';
+    btn.title = isFullscreen ? '全画面を終了' : '全画面表示';
+    map.invalidateSize();
+}
 
 // 地図初期化
 function initMaps() {
@@ -286,6 +299,19 @@ function initMaps() {
         validateFormAndUpdateButton();
     });
 
+    // 全画面ボタン（地図右下）
+    const FullscreenControl = L.Control.extend({
+        options: { position: 'bottomright' },
+        onAdd: function() {
+            const btn = L.DomUtil.create('button', 'leaflet-bar leaflet-control map-fullscreen-btn');
+            btn.innerHTML = '⛶';
+            btn.title = '全画面表示';
+            L.DomEvent.disableClickPropagation(btn);
+            L.DomEvent.on(btn, 'click', toggleMapFullscreen);
+            return btn;
+        }
+    });
+    map.addControl(new FullscreenControl());
 }
 
 // 地図を現在地に設定（初期化時用）
@@ -515,7 +541,17 @@ async function loadActivitiesOnMap() {
 
             // 期間フィルタを適用
             const filteredActivities = activities.filter(activity => isDateInRange(activity.date));
-            
+            cachedFilteredActivities = filteredActivities;
+
+            // 学区表示中なら期間に合わせて再描画
+            if (schoolDistrictsVisible && schoolDistrictData) {
+                if (schoolDistrictLayer) {
+                    map.removeLayer(schoolDistrictLayer);
+                    schoolDistrictLayer = null;
+                }
+                renderSchoolDistricts();
+            }
+
             filteredActivities.forEach(activity => {
                 
                 // ポリゴンデータがある場合はポリゴンを表示
@@ -526,12 +562,15 @@ async function loadActivitiesOnMap() {
                         const deleteButton = canDelete
                             ? `<br><button onclick="window.deleteActivityFromMap(${activity.id})" class="delete-btn" style="background-color: #dc3545; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 12px;">🗑️ 削除</button>`
                             : '';
+                        const distanceLine = activity.distance_km
+                            ? `距離: ${activity.distance_km.toFixed(2)} km<br>`
+                            : '';
                         const popupContent = `
                             <b>${activity.activity_type}</b><br>
                             担当: ${activity.username}<br>
                             日付: ${new Date(activity.date).toLocaleDateString('ja-JP')}<br>
                             場所: ${activity.location}<br>
-                            ${activity.memo ? `メモ: ${activity.memo}` : ''}${deleteButton}
+                            ${distanceLine}${activity.memo ? `メモ: ${activity.memo}` : ''}${deleteButton}
                         `;
                         const geoType = geoJSON && geoJSON.geometry && geoJSON.geometry.type;
 
@@ -754,13 +793,16 @@ async function loadMyActivities() {
 }
 
 // 支部全体の活動記録を読み込み
+let cachedTeamActivities = [];
+
 async function loadTeamActivities() {
     try {
         const response = await fetchWithAuth('/activities/all');
-        
+
         if (response.ok) {
-            const activities = await response.json();
-            displayTeamActivities(activities);
+            cachedTeamActivities = await response.json();
+            const keyword = document.getElementById('team-search')?.value || '';
+            displayTeamActivities(applyTeamSearch(cachedTeamActivities, keyword));
         } else {
             showMessage('データの読み込みに失敗しました', 'error');
         }
@@ -769,6 +811,21 @@ async function loadTeamActivities() {
             showMessage('ネットワークエラー', 'error');
         }
     }
+}
+
+function applyTeamSearch(activities, keyword) {
+    if (!keyword.trim()) return activities;
+    const q = keyword.trim().toLowerCase();
+    return activities.filter(a =>
+        (a.username || '').toLowerCase().includes(q) ||
+        (a.activity_type || '').toLowerCase().includes(q) ||
+        (a.memo || '').toLowerCase().includes(q) ||
+        (a.location || '').toLowerCase().includes(q)
+    );
+}
+
+function filterTeamActivities(keyword) {
+    displayTeamActivities(applyTeamSearch(cachedTeamActivities, keyword));
 }
 
 // 管理者用ユーザー一覧を読み込み
@@ -859,11 +916,13 @@ function displayMyActivities(activities) {
         editCell.appendChild(editBtn);
         editCell.appendChild(deleteBtn);
         
+        const distanceText = activity.distance_km != null ? `${activity.distance_km.toFixed(2)} km` : '-';
         row.innerHTML = `
             <td>${date}</td>
             <td>${activity.activity_type}</td>
             <td>${createLocationDisplay(activity.latitude, activity.longitude, activity.location, activity.location_name)}</td>
             <td>${activity.memo || ''}</td>
+            <td style="white-space:nowrap;">${distanceText}</td>
         `;
         row.appendChild(createColorCell(activity));
         row.appendChild(editCell);
@@ -886,6 +945,7 @@ function displayMyActivities(activities) {
         cardContent.innerHTML = `
             <div class="activity-header">${activity.activity_type} - ${date}</div>
             <div class="activity-details">場所: ${createLocationDisplay(activity.latitude, activity.longitude, activity.location, activity.location_name)}</div>
+            ${activity.distance_km != null ? `<div class="activity-details">距離: ${activity.distance_km.toFixed(2)} km</div>` : ''}
             ${activity.memo ? `<div class="activity-details">メモ: ${activity.memo}</div>` : ''}
         `;
 
@@ -928,12 +988,14 @@ function displayTeamActivities(activities) {
 
         // デスクトップ用テーブル
         const row = tbody.insertRow();
+        const teamDistanceText = activity.distance_km != null ? `${activity.distance_km.toFixed(2)} km` : '-';
         row.innerHTML = `
             <td>${activity.username}</td>
             <td>${date}</td>
             <td>${activity.activity_type}</td>
             <td>${createLocationDisplay(activity.latitude, activity.longitude, activity.location, activity.location_name)}</td>
             <td>${activity.memo || ''}</td>
+            <td style="white-space:nowrap;">${teamDistanceText}</td>
         `;
         row.appendChild(createColorCell(activity));
 
@@ -956,6 +1018,7 @@ function displayTeamActivities(activities) {
             <div class="activity-header">${activity.activity_type} - ${activity.username}</div>
             <div class="activity-details">日付: ${date}</div>
             <div class="activity-details">場所: ${createLocationDisplay(activity.latitude, activity.longitude, activity.location, activity.location_name)}</div>
+            ${activity.distance_km != null ? `<div class="activity-details">距離: ${activity.distance_km.toFixed(2)} km</div>` : ''}
             ${activity.memo ? `<div class="activity-details">メモ: ${activity.memo}</div>` : ''}
         `;
         card.appendChild(cardContent);
@@ -1648,7 +1711,7 @@ function updateDistrictLabels() {
 
 function renderSchoolDistricts() {
     const geojson = schoolDistrictData;
-    const { countMap, nameKey } = computeDistrictCoverage(geojson, cachedAllActivities);
+    const { countMap, nameKey } = computeDistrictCoverage(geojson, cachedFilteredActivities);
 
     // GPX軌跡（overlayPane z:400）より下のペインに配置してクリックを通過させる
     if (!map.getPane('districtPane')) {
@@ -1666,12 +1729,15 @@ function renderSchoolDistricts() {
         onEachFeature: (feature, layer) => {
             const name = feature.properties[nameKey] || '不明';
             const count = countMap[name] || 0;
+            const dateRange = currentDateFilter.isActive
+                ? `${currentDateFilter.startDate}〜${currentDateFilter.endDate}`
+                : '全期間';
             layer.bindTooltip(name, {
                 permanent: true,
                 direction: 'center',
                 className: 'district-label'
             });
-            layer.bindPopup(`<b>${name}</b><br>通過活動数: ${count}件`);
+            layer.bindPopup(`<b>${name}</b><br>通過活動数: ${count}件<br><span style="font-size:11px;color:#888;">${dateRange}</span>`);
         }
     }).addTo(map);
 

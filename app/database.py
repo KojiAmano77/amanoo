@@ -5,10 +5,25 @@ from sqlalchemy.orm import sessionmaker, relationship
 from datetime import datetime
 import os
 import time
+import json
+import math
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
 load_dotenv()
+
+def _haversine_km(coords):
+    R = 6371
+    total = 0.0
+    for i in range(1, len(coords)):
+        lon1, lat1 = coords[i-1][0], coords[i-1][1]
+        lon2, lat2 = coords[i][0], coords[i][1]
+        dlat = math.radians(lat2 - lat1)
+        dlon = math.radians(lon2 - lon1)
+        a = (math.sin(dlat/2)**2
+             + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon/2)**2)
+        total += R * 2 * math.asin(math.sqrt(a))
+    return round(total, 2)
 
 DATABASE_URL = os.getenv("DATABASE_URL", "mysql+pymysql://app_user:app_password@mysql:3306/team_activities")
 
@@ -42,6 +57,7 @@ class Activity(Base):
     longitude = Column(Float)                           # 経度（中心点またはポイント）
     polygon_coordinates = Column(MEDIUMTEXT)             # GeoJSON形式のポリゴン座標データ
     gpx_content = Column(MEDIUMTEXT)                    # GPXファイルの元データ
+    distance_km = Column(Float, nullable=True)          # 歩行距離（km）
     date = Column(DateTime, nullable=False)             # 実施日
     memo = Column(Text)                                 # メモ
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -107,6 +123,27 @@ def create_tables():
                 if "is_admin" not in user_columns:
                     with engine.begin() as conn:
                         conn.execute(text("ALTER TABLE users ADD COLUMN is_admin BOOLEAN NOT NULL DEFAULT FALSE"))
+            if "activities" in inspector.get_table_names():
+                activity_columns = {column["name"] for column in inspector.get_columns("activities")}
+                if "distance_km" not in activity_columns:
+                    with engine.begin() as conn:
+                        conn.execute(text("ALTER TABLE activities ADD COLUMN distance_km FLOAT"))
+                        # 既存GPXデータから距離をバックフィル
+                        rows = conn.execute(text(
+                            "SELECT id, polygon_coordinates FROM activities WHERE polygon_coordinates IS NOT NULL"
+                        )).fetchall()
+                        for row in rows:
+                            try:
+                                geo = json.loads(row[1])
+                                geom = geo.get("geometry", geo)
+                                if geom.get("type") == "LineString":
+                                    coords = geom["coordinates"]
+                                    dist = _haversine_km(coords)
+                                    conn.execute(text(
+                                        "UPDATE activities SET distance_km = :d WHERE id = :id"
+                                    ), {"d": dist, "id": row[0]})
+                            except Exception:
+                                pass
             print("Database tables created successfully!")
             return
         except Exception as e:
