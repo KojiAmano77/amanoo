@@ -1646,6 +1646,10 @@ function applyDateFilter() {
 // 期間フィルタをリセット（デフォルト範囲で有効化）
 function resetDateFilter() {
     setDefaultDateRange();
+    // 地図検索ボックスもクリア
+    const mapSearchEl = document.getElementById('map-search');
+    if (mapSearchEl) mapSearchEl.value = '';
+    mapSearchKeyword = '';
     // データを再読み込み
     refreshAllData();
     showMessage('期間フィルタをリセットしました', 'success');

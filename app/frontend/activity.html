@@ -32,8 +32,8 @@
                     </div>
                 </div>
                 <button id="filter-btn" class="filter-btn" onclick="applyDateFilter()">期間指定</button>
-                <button id="reset-filter-btn" class="reset-filter-btn" onclick="resetDateFilter()">リセット</button>
                 <input type="search" id="map-search" class="map-search-input" placeholder="担当者・種別・メモで地図を絞込…" oninput="filterMapActivities(this.value)">
+                <button id="reset-filter-btn" class="reset-filter-btn" onclick="resetDateFilter()">リセット</button>
             </div>
         </div>
 
@@ -68,6 +68,7 @@
                                 <option value="">活動種別を選択</option>
                                 <option value="辻立ち">辻立ち</option>
                                 <option value="ポスティング">ポスティング</option>
+                                <option value="あいさつ回り">あいさつ回り</option>
                                 <option value="ポスター掲示">ポスター掲示</option>
                                 <option value="その他">その他</option>
                             </select>
