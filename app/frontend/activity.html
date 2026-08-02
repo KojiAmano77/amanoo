@@ -33,6 +33,7 @@
                 </div>
                 <button id="filter-btn" class="filter-btn" onclick="applyDateFilter()">期間指定</button>
                 <button id="reset-filter-btn" class="reset-filter-btn" onclick="resetDateFilter()">リセット</button>
+                <input type="search" id="map-search" class="map-search-input" placeholder="担当者・種別・メモで地図を絞込…" oninput="filterMapActivities(this.value)">
             </div>
         </div>
 
@@ -172,6 +173,6 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
     <script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
-    <script src="/static/js/activity.js?v=8"></script>
+    <script src="/static/js/activity.js?v=10"></script>
 </body>
 </html>

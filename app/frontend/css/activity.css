@@ -641,6 +641,31 @@ button:active {
     box-shadow: 0 0 0 2px rgba(33,150,243,0.2);
 }
 
+/* 地図絞込検索ボックス */
+.map-search-input {
+    flex: 1;
+    min-width: 160px;
+    max-width: 280px;
+    padding: 7px 10px;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    font-size: 13px;
+    outline: none;
+    margin-left: auto;
+}
+.map-search-input:focus {
+    border-color: #2196F3;
+    box-shadow: 0 0 0 2px rgba(33,150,243,0.2);
+}
+@media (max-width: 767px) {
+    .map-search-input {
+        min-width: 120px;
+        max-width: 200px;
+        font-size: 12px;
+        padding: 6px 8px;
+    }
+}
+
 /* 学区ラベル */
 .district-label {
     font-size: 10px;

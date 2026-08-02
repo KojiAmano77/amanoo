@@ -39,6 +39,8 @@ const ROUTE_COLORS = [
 
 const activityColorMap = new Map(); // activityId → 現在の色
 const activityLayerMap = new Map(); // activityId → Leafletレイヤー
+const activityDataMap = new Map();  // activityId → 活動データ（地図検索用）
+let mapSearchKeyword = '';
 
 const GPX_TRACK_STYLE = { color: '#FF6600', weight: 4, opacity: 0.85 }; // GPXプレビュー軌跡スタイル
 
@@ -531,6 +533,7 @@ async function loadActivitiesOnMap() {
     });
     activityMarkers = [];
     activityLayerMap.clear();
+    activityDataMap.clear();
 
     try {
         const response = await fetchWithAuth('/activities/all');
@@ -594,6 +597,7 @@ async function loadActivitiesOnMap() {
                             activityMarkers.push(polygon);
                             activityLayerMap.set(activity.id, polygon);
                         }
+                        activityDataMap.set(activity.id, activity);
                     } catch (err) {
                         console.error('座標データの解析エラー:', err);
                         // フォールバック: マーカー表示
@@ -602,7 +606,7 @@ async function loadActivitiesOnMap() {
                             const deleteButton = canDelete
                                 ? `<br><button onclick="window.deleteActivityFromMap(${activity.id})" class="delete-btn" style="background-color: #dc3545; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 12px;">🗑️ 削除</button>`
                                 : '';
-                            
+
                             const marker = L.marker([activity.latitude, activity.longitude])
                                 .addTo(map)
                                 .bindPopup(`
@@ -613,6 +617,8 @@ async function loadActivitiesOnMap() {
                                     ${activity.memo ? `メモ: ${activity.memo}` : ''}${deleteButton}
                                 `);
                             activityMarkers.push(marker);
+                            activityLayerMap.set(activity.id, marker);
+                            activityDataMap.set(activity.id, activity);
                         }
                     }
                 } else if (activity.latitude && activity.longitude) {
@@ -621,7 +627,7 @@ async function loadActivitiesOnMap() {
                     const deleteButton = canDelete
                         ? `<br><button onclick="window.deleteActivityFromMap(${activity.id})" class="delete-btn" style="background-color: #dc3545; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 12px;">🗑️ 削除</button>`
                         : '';
-                    
+
                     const marker = L.marker([activity.latitude, activity.longitude])
                         .addTo(map)
                         .bindPopup(`
@@ -632,8 +638,13 @@ async function loadActivitiesOnMap() {
                             ${activity.memo ? `メモ: ${activity.memo}` : ''}${deleteButton}
                         `);
                     activityMarkers.push(marker);
+                    activityLayerMap.set(activity.id, marker);
+                    activityDataMap.set(activity.id, activity);
                 }
             });
+
+            // データ再読み込み後にキーワードフィルタを再適用
+            if (mapSearchKeyword) filterMapActivities(mapSearchKeyword);
         }
     } catch (error) {
         if (error.message !== 'Unauthorized') {
@@ -828,6 +839,43 @@ function filterTeamActivities(keyword) {
     displayTeamActivities(applyTeamSearch(cachedTeamActivities, keyword));
 }
 
+// 地図上のGPXログ・マーカーをキーワードでフィルタリング
+function filterMapActivities(keyword) {
+    mapSearchKeyword = keyword;
+    const q = keyword.trim().toLowerCase();
+
+    activityLayerMap.forEach((layer, id) => {
+        const activity = activityDataMap.get(id);
+        if (!activity) return;
+        const matches = !q ||
+            (activity.username || '').toLowerCase().includes(q) ||
+            (activity.activity_type || '').toLowerCase().includes(q) ||
+            (activity.memo || '').toLowerCase().includes(q) ||
+            (activity.location || '').toLowerCase().includes(q);
+
+        if (matches) {
+            if (!map.hasLayer(layer)) layer.addTo(map);
+        } else {
+            if (map.hasLayer(layer)) map.removeLayer(layer);
+        }
+    });
+
+    // 学区カバー率をキーワードフィルタ後の活動に連動
+    const dateFiltered = cachedAllActivities.filter(a => isDateInRange(a.date));
+    cachedFilteredActivities = q
+        ? dateFiltered.filter(a =>
+            (a.username || '').toLowerCase().includes(q) ||
+            (a.activity_type || '').toLowerCase().includes(q) ||
+            (a.memo || '').toLowerCase().includes(q) ||
+            (a.location || '').toLowerCase().includes(q))
+        : dateFiltered;
+
+    if (schoolDistrictsVisible && schoolDistrictData) {
+        if (schoolDistrictLayer) { map.removeLayer(schoolDistrictLayer); schoolDistrictLayer = null; }
+        renderSchoolDistricts();
+    }
+}
+
 // 管理者用ユーザー一覧を読み込み
 async function loadAdminUsers() {
     try {
@@ -892,12 +940,14 @@ function displayMyActivities(activities) {
     tbody.innerHTML = '';
     mobileList.innerHTML = '';
     
-    // 期間フィルタを適用
-    const filteredActivities = activities.filter(activity => isDateInRange(activity.date));
-    
+    // 期間フィルタを適用し、新しい順に並べる
+    const filteredActivities = activities
+        .filter(activity => isDateInRange(activity.date))
+        .sort((a, b) => new Date(b.date) - new Date(a.date));
+
     filteredActivities.forEach(activity => {
         const date = new Date(activity.date).toLocaleDateString('ja-JP');
-        
+
         // デスクトップ用テーブル
         const row = tbody.insertRow();
         const editCell = document.createElement('td');
@@ -980,8 +1030,10 @@ function displayTeamActivities(activities) {
         actionHeader.classList.toggle('hidden', !currentUserIsAdmin);
     }
 
-    // 期間フィルタを適用
-    const filteredActivities = activities.filter(activity => isDateInRange(activity.date));
+    // 期間フィルタを適用し、新しい順に並べる
+    const filteredActivities = activities
+        .filter(activity => isDateInRange(activity.date))
+        .sort((a, b) => new Date(b.date) - new Date(a.date));
 
     filteredActivities.forEach(activity => {
         const date = new Date(activity.date).toLocaleDateString('ja-JP');
