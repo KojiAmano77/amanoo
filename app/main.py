@@ -107,6 +107,15 @@ class EventSchema(EventBase):
         from_attributes = True
 
 
+class AdminActivityEditRequest(BaseModel):
+    username: str
+    activity_type: str
+    date: str
+    location: str
+    memo: Optional[str] = ""
+    distance_km: Optional[float] = None
+
+
 class FormActivityRequest(BaseModel):
     user_id: Optional[str] = None
     担当者: Optional[str] = None
@@ -598,6 +607,46 @@ async def delete_activity(
     db.delete(activity)
     db.commit()
     return {"message": "Activity deleted successfully"}
+
+
+# 管理者による活動記録編集（担当者変更を含む）
+@app.put("/admin/activities/{activity_id}")
+async def admin_update_activity(
+    activity_id: int,
+    body: AdminActivityEditRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="管理者権限が必要です")
+
+    activity = db.query(Activity).filter(Activity.id == activity_id).first()
+    if not activity:
+        raise HTTPException(status_code=404, detail="活動記録が見つかりません")
+
+    # 担当者名からユーザーを検索
+    target_user = db.query(User).filter(User.username == body.username).first()
+    if not target_user:
+        raise HTTPException(status_code=404, detail=f"ユーザー '{body.username}' が見つかりません")
+
+    activity.user_id = target_user.id
+    activity.activity_type = body.activity_type
+    activity.location = body.location
+    activity.memo = body.memo or ""
+    activity.distance_km = body.distance_km
+    activity.date = _parse_activity_date(body.date)
+    db.commit()
+    db.refresh(activity)
+
+    return {
+        "id": activity.id,
+        "username": target_user.username,
+        "activity_type": activity.activity_type,
+        "location": activity.location,
+        "memo": activity.memo,
+        "distance_km": activity.distance_km,
+        "date": activity.date.isoformat(),
+    }
 
 
 # メインページ

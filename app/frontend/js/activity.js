@@ -1119,10 +1119,16 @@ function displayTeamActivities(activities) {
 
         if (currentUserIsAdmin) {
             const td = document.createElement('td');
+            td.className = 'team-action-cell';
+            const editBtn = document.createElement('button');
+            editBtn.className = 'team-action-btn team-edit-btn';
+            editBtn.textContent = '編集';
+            editBtn.onclick = () => openEditModal(activity);
             const deleteBtn = document.createElement('button');
-            deleteBtn.className = 'delete-btn';
+            deleteBtn.className = 'team-action-btn team-delete-btn';
             deleteBtn.textContent = '削除';
             deleteBtn.onclick = () => deleteActivity(activity.id);
+            td.appendChild(editBtn);
             td.appendChild(deleteBtn);
             row.appendChild(td);
         }
@@ -1150,10 +1156,15 @@ function displayTeamActivities(activities) {
         if (currentUserIsAdmin) {
             const cardActions = document.createElement('div');
             cardActions.className = 'action-buttons';
+            const cardEditBtn = document.createElement('button');
+            cardEditBtn.className = 'edit-btn admin-edit-btn';
+            cardEditBtn.textContent = '編集';
+            cardEditBtn.onclick = () => openEditModal(activity);
             const cardDeleteBtn = document.createElement('button');
             cardDeleteBtn.className = 'delete-btn';
             cardDeleteBtn.textContent = '削除';
             cardDeleteBtn.onclick = () => deleteActivity(activity.id);
+            cardActions.appendChild(cardEditBtn);
             cardActions.appendChild(cardDeleteBtn);
             card.appendChild(cardActions);
         }
@@ -1162,7 +1173,82 @@ function displayTeamActivities(activities) {
     });
 }
 
-// 活動記録編集
+// ===== 管理者専用：支部記録編集ダイアログ =====
+
+let editingAdminActivityId = null;
+
+function openEditModal(activity) {
+    editingAdminActivityId = activity.id;
+
+    // フィールドに現在値をセット
+    document.getElementById('edit-username').value = activity.username || '';
+    document.getElementById('edit-date').value = activity.date ? activity.date.split('T')[0] : '';
+    document.getElementById('edit-activity-type').value = activity.activity_type || '辻立ち';
+    document.getElementById('edit-location').value = activity.location || '';
+    document.getElementById('edit-memo').value = activity.memo || '';
+    document.getElementById('edit-distance').value = activity.distance_km != null ? activity.distance_km : '';
+
+    document.getElementById('edit-activity-modal').style.display = 'flex';
+}
+
+function closeEditModal() {
+    document.getElementById('edit-activity-modal').style.display = 'none';
+    editingAdminActivityId = null;
+}
+
+async function submitEditActivity() {
+    if (!editingAdminActivityId) return;
+
+    const username   = document.getElementById('edit-username').value.trim();
+    const date       = document.getElementById('edit-date').value;
+    const actType    = document.getElementById('edit-activity-type').value;
+    const location   = document.getElementById('edit-location').value.trim();
+    const memo       = document.getElementById('edit-memo').value.trim();
+    const distRaw    = document.getElementById('edit-distance').value;
+    const distanceKm = distRaw !== '' ? parseFloat(distRaw) : null;
+
+    if (!username) { showMessage('担当者を入力してください', 'error'); return; }
+    if (!date)     { showMessage('日付を入力してください', 'error');   return; }
+    if (!location) { showMessage('場所を入力してください', 'error');   return; }
+
+    const okBtn = document.querySelector('.modal-ok-btn');
+    okBtn.disabled = true;
+    okBtn.textContent = '保存中…';
+
+    try {
+        const response = await fetchWithAuth(`/admin/activities/${editingAdminActivityId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                username,
+                date,
+                activity_type: actType,
+                location,
+                memo,
+                distance_km: distanceKm
+            })
+        });
+
+        if (response.ok) {
+            showMessage('活動記録を更新しました', 'success');
+            closeEditModal();
+            loadTeamActivities();
+            loadActivitiesOnMap();
+        } else {
+            const err = await response.json().catch(() => ({}));
+            showMessage(err.detail || '更新に失敗しました', 'error');
+        }
+    } catch (error) {
+        if (error.message !== 'Unauthorized') {
+            showMessage('ネットワークエラー', 'error');
+        }
+    } finally {
+        okBtn.disabled = false;
+        okBtn.textContent = 'OK';
+    }
+}
+
+// ===== 自分の記録の編集（地図画面へ復元） =====
 async function editActivity(id, activityType, location, date, memo, latitude, longitude, locationName, polygonCoords) {
     
     editingActivityId = id;

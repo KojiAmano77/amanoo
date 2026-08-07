@@ -826,3 +826,139 @@ button:active {
     background: #1976D2 !important;
 }
 
+/* ===== 活動記録編集モーダル（管理者専用） ===== */
+.modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 20000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+}
+.modal-box {
+    background: #fff;
+    border-radius: 10px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.25);
+    padding: 24px 28px;
+    width: 100%;
+    max-width: 420px;
+    max-height: 90vh;
+    overflow-y: auto;
+}
+.modal-title {
+    margin: 0 0 18px;
+    font-size: 1.1rem;
+    color: #2c3e50;
+    border-bottom: 2px solid #3498db;
+    padding-bottom: 10px;
+}
+.modal-form {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+.modal-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+.modal-field label {
+    font-size: 12px;
+    font-weight: bold;
+    color: #555;
+}
+.modal-field input,
+.modal-field select {
+    padding: 8px 10px;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    font-size: 14px;
+    width: 100%;
+    box-sizing: border-box;
+}
+.modal-field input:focus,
+.modal-field select:focus {
+    outline: none;
+    border-color: #3498db;
+    box-shadow: 0 0 0 2px rgba(52,152,219,0.2);
+}
+.modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 20px;
+}
+.modal-cancel-btn {
+    padding: 8px 20px;
+    background: #ecf0f1;
+    color: #555;
+    border: 1px solid #bdc3c7;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+}
+.modal-cancel-btn:hover {
+    background: #bdc3c7;
+}
+.modal-ok-btn {
+    padding: 8px 24px;
+    background: #3498db;
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: bold;
+}
+.modal-ok-btn:hover {
+    background: #2980b9;
+}
+.modal-ok-btn:disabled {
+    background: #aaa;
+    cursor: not-allowed;
+}
+
+/* 支部記録 操作セル（縦並び・コンパクト） */
+.team-action-cell {
+    padding: 4px 6px !important;
+    vertical-align: middle;
+    width: 52px;          /* 最小幅に固定 */
+    min-width: 52px;
+}
+.team-action-btn {
+    display: block;
+    width: 100%;
+    padding: 3px 0;
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 11px;
+    font-weight: bold;
+    color: #fff;
+    text-align: center;
+    line-height: 1.4;
+}
+.team-action-btn + .team-action-btn {
+    margin-top: 3px;
+}
+.team-edit-btn {
+    background: #3498db;
+}
+.team-edit-btn:hover {
+    background: #2980b9;
+}
+.team-delete-btn {
+    background: #e74c3c;
+}
+.team-delete-btn:hover {
+    background: #c0392b;
+}
+
+@media (max-width: 600px) {
+    .modal-box {
+        padding: 18px 16px;
+    }
+}
+
