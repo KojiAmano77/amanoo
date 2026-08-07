@@ -381,6 +381,8 @@ async def create_activity(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
+    if current_user.is_readonly:
+        raise HTTPException(status_code=403, detail="閲覧専用アカウントのため記録の登録はできません")
     activity_date = datetime.fromisoformat(date)
 
     distance_km = None
@@ -443,7 +445,8 @@ async def get_current_user_info(current_user: User = Depends(get_current_user)):
         "id": current_user.id,
         "username": current_user.username,
         "email": current_user.email,
-        "is_admin": current_user.is_admin
+        "is_admin": current_user.is_admin,
+        "is_readonly": current_user.is_readonly
     }
 
 @app.get("/admin/users")
@@ -461,10 +464,36 @@ async def list_admin_users(
             "username": user.username,
             "email": user.email,
             "is_admin": user.is_admin,
+            "is_readonly": user.is_readonly,
             "created_at": user.created_at.isoformat() if user.created_at else None,
         }
         for user in users
     ]
+
+@app.post("/admin/users/{user_id}/toggle-readonly")
+async def toggle_readonly_user(
+    user_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="管理者権限が必要です")
+
+    target_user = db.query(User).filter(User.id == user_id).first()
+    if not target_user:
+        raise HTTPException(status_code=404, detail="ユーザーが見つかりません")
+
+    target_user.is_readonly = not target_user.is_readonly
+    # 閲覧専用にする場合は管理者権限を剥奪（相互排他）
+    if target_user.is_readonly:
+        target_user.is_admin = False
+    db.commit()
+    return {
+        "id": target_user.id,
+        "username": target_user.username,
+        "is_admin": target_user.is_admin,
+        "is_readonly": target_user.is_readonly
+    }
 
 @app.post("/admin/users/{user_id}/toggle-admin")
 async def toggle_admin_user(
@@ -480,11 +509,15 @@ async def toggle_admin_user(
         raise HTTPException(status_code=404, detail="ユーザーが見つかりません")
 
     target_user.is_admin = not target_user.is_admin
+    # 管理者にする場合は閲覧専用を解除（相互排他）
+    if target_user.is_admin:
+        target_user.is_readonly = False
     db.commit()
     return {
         "id": target_user.id,
         "username": target_user.username,
-        "is_admin": target_user.is_admin
+        "is_admin": target_user.is_admin,
+        "is_readonly": target_user.is_readonly
     }
 
 # すべての活動記録を取得（支部全体）
@@ -554,12 +587,14 @@ async def delete_activity(
     db: Session = Depends(get_db)
 ):
     activity = db.query(Activity).filter(Activity.id == activity_id).first()
-    
+
     if not activity:
         raise HTTPException(status_code=404, detail="Activity not found")
+    if current_user.is_readonly:
+        raise HTTPException(status_code=403, detail="閲覧専用アカウントのため削除はできません")
     if activity.user_id != current_user.id and not current_user.is_admin:
         raise HTTPException(status_code=403, detail="この記録を削除する権限がありません")
-    
+
     db.delete(activity)
     db.commit()
     return {"message": "Activity deleted successfully"}

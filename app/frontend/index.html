@@ -23,7 +23,9 @@
                     <p><a href="#" id="forgot-password-link">パスワードをお忘れですか？</a></p>
                 </div>
                 
-                <div class="form-section">
+                <!-- 新規登録UI：セキュリティのため一時的に非表示（バックエンドのロジックは残存）
+                     再表示する場合は display:none を削除する -->
+                <div class="form-section" style="display:none;">
                     <h2>新規登録</h2>
                     <form id="register-form">
                         <input type="text" id="register-username" placeholder="ユーザー名" required>

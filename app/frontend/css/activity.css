@@ -144,13 +144,39 @@ button:hover {
 button:active {
     background-color: #3d8b40;
 }
+/* ログインユーザー表示 */
+.user-info {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: auto;
+    background: #f0f4ff;
+    border: 1px solid #c8d8ff;
+    border-radius: 20px;
+    padding: 4px 12px 4px 8px;
+    flex-shrink: 0;
+}
+.user-avatar {
+    font-size: 1rem;
+    line-height: 1;
+}
+.user-name {
+    font-size: 13px;
+    font-weight: bold;
+    color: #1a3a6b;
+    white-space: nowrap;
+    max-width: 120px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
 .logout-btn {
     background-color: #f44336;
     padding: 4px 8px;
     font-size: 10px;
     width: auto;
     flex-shrink: 0;
-    margin-left: auto;
+    margin-left: 0;
 }
 .logout-btn:hover {
     background-color: #da190b;
@@ -292,14 +318,90 @@ button:active {
 }
 
 .admin-toggle-btn {
-    background-color: #007bff;
     padding: 6px 10px;
     font-size: 12px;
     width: auto;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    color: white;
+    /* デフォルト（管理者付与）: 緑 */
+    background-color: #27ae60;
+}
+.admin-toggle-btn:hover {
+    background-color: #1e8449;
+}
+/* 管理者解除のとき .active クラスを付与 → 赤 */
+.admin-toggle-btn.active {
+    background-color: #e74c3c;
+}
+.admin-toggle-btn.active:hover {
+    background-color: #c0392b;
 }
 
-.admin-toggle-btn:hover {
-    background-color: #0056b3;
+/* 管理者バッジ */
+.admin-badge {
+    display: inline-block;
+    background: #d4edda;
+    color: #155724;
+    border: 1px solid #28a745;
+    border-radius: 10px;
+    font-size: 10px;
+    padding: 1px 6px;
+    margin-left: 4px;
+    vertical-align: middle;
+}
+
+/* 閲覧専用トグルボタン */
+.readonly-toggle-btn {
+    background-color: #6c757d;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 6px 10px;
+    font-size: 12px;
+    cursor: pointer;
+    margin-left: 6px;
+    width: auto;
+}
+.readonly-toggle-btn:hover {
+    background-color: #545b62;
+}
+.readonly-toggle-btn.active {
+    background-color: #e67e22;
+}
+.readonly-toggle-btn.active:hover {
+    background-color: #ca6f1e;
+}
+.readonly-toggle-btn:disabled {
+    background-color: #ccc;
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+/* 閲覧専用バッジ（ユーザー名の横） */
+.readonly-badge {
+    display: inline-block;
+    background: #fff3cd;
+    color: #856404;
+    border: 1px solid #ffc107;
+    border-radius: 10px;
+    font-size: 10px;
+    padding: 1px 6px;
+    margin-left: 4px;
+    vertical-align: middle;
+}
+
+/* 閲覧専用バナー（地図タブ上部） */
+.readonly-banner {
+    background: #fff3cd;
+    color: #856404;
+    border: 1px solid #ffc107;
+    border-radius: 6px;
+    padding: 8px 14px;
+    font-size: 13px;
+    margin-bottom: 10px;
+    font-weight: bold;
 }
 
 /* 地図用スタイル */
@@ -663,6 +765,13 @@ button:active {
         max-width: 200px;
         font-size: 12px;
         padding: 6px 8px;
+    }
+    .user-info {
+        padding: 3px 8px 3px 6px;
+    }
+    .user-name {
+        font-size: 11px;
+        max-width: 80px;
     }
 }
 

@@ -27,7 +27,11 @@ def _haversine_km(coords):
 
 DATABASE_URL = os.getenv("DATABASE_URL", "mysql+pymysql://app_user:app_password@mysql:3306/team_activities")
 
-engine = create_engine(DATABASE_URL)
+engine = create_engine(
+    DATABASE_URL,
+    pool_pre_ping=True,   # 使用前にコネクションの死活確認（切れていれば自動再接続）
+    pool_recycle=3600,    # 1時間でコネクションを再作成（MySQLのwait_timeout対策）
+)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 Base = declarative_base()
@@ -40,6 +44,7 @@ class User(Base):
     email = Column(String(100), unique=True, index=True, nullable=True)
     password_hash = Column(String(255), nullable=False)
     is_admin = Column(Boolean, default=False, nullable=False)
+    is_readonly = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     
     activities = relationship("Activity", back_populates="user")
@@ -123,6 +128,9 @@ def create_tables():
                 if "is_admin" not in user_columns:
                     with engine.begin() as conn:
                         conn.execute(text("ALTER TABLE users ADD COLUMN is_admin BOOLEAN NOT NULL DEFAULT FALSE"))
+                if "is_readonly" not in user_columns:
+                    with engine.begin() as conn:
+                        conn.execute(text("ALTER TABLE users ADD COLUMN is_readonly BOOLEAN NOT NULL DEFAULT FALSE"))
             if "activities" in inspector.get_table_names():
                 activity_columns = {column["name"] for column in inspector.get_columns("activities")}
                 if "distance_km" not in activity_columns:

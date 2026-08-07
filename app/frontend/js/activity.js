@@ -8,6 +8,8 @@ let currentPolygon = null;
 let currentPolygonGeoJSON = null;
 let currentUserId = null;
 let currentUserIsAdmin = false;
+let currentUserIsReadonly = false;
+let currentUsername = null;
 let gpxTrackLayer = null;
 let gpxMarkers = [];
 let currentPinMarker = null;
@@ -481,10 +483,25 @@ async function getCurrentUser() {
             const user = await response.json();
             currentUserId = user.id;
             currentUserIsAdmin = Boolean(user.is_admin);
+            currentUserIsReadonly = Boolean(user.is_readonly);
+            currentUsername = user.username;
+
+            // ヘッダーにユーザー名を表示
+            const userBadge = document.getElementById('current-user-badge');
+            if (userBadge) {
+                userBadge.textContent = user.username;
+            }
+
             const adminTab = document.getElementById('admin-tab');
             if (adminTab) {
                 adminTab.classList.toggle('hidden', !currentUserIsAdmin);
             }
+
+            // 閲覧専用アカウントの場合は記録操作UIを無効化
+            if (currentUserIsReadonly) {
+                applyReadonlyUI();
+            }
+
             return user;
         }
     } catch (error) {
@@ -561,7 +578,7 @@ async function loadActivitiesOnMap() {
                 if (activity.polygon_coordinates) {
                     try {
                         const geoJSON = normalizeGeoJSON(activity.polygon_coordinates);
-                        const canDelete = currentUserId === activity.user_id || currentUserIsAdmin;
+                        const canDelete = !currentUserIsReadonly && (currentUserId === activity.user_id || currentUserIsAdmin);
                         const deleteButton = canDelete
                             ? `<br><button onclick="window.deleteActivityFromMap(${activity.id})" class="delete-btn" style="background-color: #dc3545; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 12px;">🗑️ 削除</button>`
                             : '';
@@ -602,7 +619,7 @@ async function loadActivitiesOnMap() {
                         console.error('座標データの解析エラー:', err);
                         // フォールバック: マーカー表示
                         if (activity.latitude && activity.longitude) {
-                            const canDelete = currentUserId === activity.user_id || currentUserIsAdmin;
+                            const canDelete = !currentUserIsReadonly && (currentUserId === activity.user_id || currentUserIsAdmin);
                             const deleteButton = canDelete
                                 ? `<br><button onclick="window.deleteActivityFromMap(${activity.id})" class="delete-btn" style="background-color: #dc3545; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 12px;">🗑️ 削除</button>`
                                 : '';
@@ -623,7 +640,7 @@ async function loadActivitiesOnMap() {
                     }
                 } else if (activity.latitude && activity.longitude) {
                     // ポリゴンデータがない場合は従来通りマーカー表示
-                    const canDelete = currentUserId === activity.user_id || currentUserIsAdmin;
+                    const canDelete = !currentUserIsReadonly && (currentUserId === activity.user_id || currentUserIsAdmin);
                     const deleteButton = canDelete
                         ? `<br><button onclick="window.deleteActivityFromMap(${activity.id})" class="delete-btn" style="background-color: #dc3545; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 12px;">🗑️ 削除</button>`
                         : '';
@@ -839,6 +856,32 @@ function filterTeamActivities(keyword) {
     displayTeamActivities(applyTeamSearch(cachedTeamActivities, keyword));
 }
 
+// 閲覧専用UIの適用（記録・削除ボタン等を非表示にする）
+function applyReadonlyUI() {
+    // 地図タブの記録フォーム・操作ボタンを非表示
+    const form = document.getElementById('activity-form');
+    if (form) form.style.display = 'none';
+
+    const submitBtn = document.querySelector('.submit-btn');
+    if (submitBtn) submitBtn.style.display = 'none';
+
+    // GPX・ピン・描画ボタンを非表示
+    ['gpx-upload-btn', 'gpx-file-input', 'gpx-clear-btn', 'pin-mode-btn', 'pin-clear-btn'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.style.display = 'none';
+    });
+    document.querySelectorAll('.gpx-upload-btn, .gpx-clear-btn').forEach(el => el.style.display = 'none');
+
+    // 閲覧専用バナーを表示
+    const mapView = document.getElementById('map-view');
+    if (mapView) {
+        const banner = document.createElement('div');
+        banner.className = 'readonly-banner';
+        banner.textContent = '👁 閲覧専用モード：記録の登録・削除はできません';
+        mapView.insertBefore(banner, mapView.firstChild);
+    }
+}
+
 // 地図上のGPXログ・マーカーをキーワードでフィルタリング
 function filterMapActivities(keyword) {
     mapSearchKeyword = keyword;
@@ -902,15 +945,21 @@ function displayAdminUsers(users) {
 
     users.forEach(user => {
         const row = tbody.insertRow();
-        const isAdminText = user.is_admin ? 'はい' : 'いいえ';
-        const actionText = user.is_admin ? '管理者解除' : '管理者付与';
+        const adminBtnText    = user.is_admin    ? '管理者解除'   : '管理者付与';
+        const readonlyBtnText = user.is_readonly ? '閲覧専用解除' : '閲覧専用にする';
+        const adminBadge    = user.is_admin    ? '<span class="admin-badge">管理者</span>'      : '';
+        const readonlyBadge = user.is_readonly ? '<span class="readonly-badge">閲覧専用</span>' : '';
+        // 管理者は閲覧専用ボタンを無効化、閲覧専用は管理者付与のみ可能（解除は常に可）
+        const readonlyDisabled = user.is_admin ? 'disabled title="管理者は閲覧専用にできません"' : '';
 
         row.innerHTML = `
-            <td>${user.username}</td>
+            <td>${user.username}${adminBadge}${readonlyBadge}</td>
             <td>${user.email || ''}</td>
-            <td>${isAdminText}</td>
             <td>${user.created_at ? new Date(user.created_at).toLocaleDateString('ja-JP') : ''}</td>
-            <td><button class="admin-toggle-btn" onclick="toggleAdminUser(${user.id})">${actionText}</button></td>
+            <td>
+                <button class="admin-toggle-btn ${user.is_admin ? 'active' : ''}" onclick="toggleAdminUser(${user.id})">${adminBtnText}</button>
+                <button class="readonly-toggle-btn ${user.is_readonly ? 'active' : ''}" onclick="toggleReadonlyUser(${user.id})" ${readonlyDisabled}>${readonlyBtnText}</button>
+            </td>
         `;
     });
 }
@@ -924,6 +973,23 @@ window.toggleAdminUser = async function(userId) {
         } else {
             const result = await response.json().catch(() => ({}));
             showMessage(result.detail || '権限の更新に失敗しました', 'error');
+        }
+    } catch (error) {
+        if (error.message !== 'Unauthorized') {
+            showMessage('ネットワークエラー', 'error');
+        }
+    }
+};
+
+window.toggleReadonlyUser = async function(userId) {
+    try {
+        const response = await fetchWithAuth(`/admin/users/${userId}/toggle-readonly`, { method: 'POST' });
+        if (response.ok) {
+            showMessage('閲覧専用設定を更新しました', 'success');
+            loadAdminUsers();
+        } else {
+            const result = await response.json().catch(() => ({}));
+            showMessage(result.detail || '設定の更新に失敗しました', 'error');
         }
     } catch (error) {
         if (error.message !== 'Unauthorized') {
