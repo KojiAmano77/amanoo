@@ -46,6 +46,7 @@ class User(Base):
     is_admin = Column(Boolean, default=False, nullable=False)
     is_readonly = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, nullable=True)
     
     activities = relationship("Activity", back_populates="user")
     events = relationship("Event", back_populates="user")
@@ -131,6 +132,9 @@ def create_tables():
                 if "is_readonly" not in user_columns:
                     with engine.begin() as conn:
                         conn.execute(text("ALTER TABLE users ADD COLUMN is_readonly BOOLEAN NOT NULL DEFAULT FALSE"))
+                if "updated_at" not in user_columns:
+                    with engine.begin() as conn:
+                        conn.execute(text("ALTER TABLE users ADD COLUMN updated_at DATETIME NULL"))
             if "activities" in inspector.get_table_names():
                 activity_columns = {column["name"] for column in inspector.get_columns("activities")}
                 if "distance_km" not in activity_columns:

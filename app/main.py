@@ -116,6 +116,22 @@ class AdminActivityEditRequest(BaseModel):
     distance_km: Optional[float] = None
 
 
+class AdminUserCreateRequest(BaseModel):
+    username: str
+    email: Optional[str] = None
+    password: str
+    is_admin: bool = False
+    is_readonly: bool = False
+
+
+class AdminUserUpdateRequest(BaseModel):
+    username: str
+    email: Optional[str] = None
+    password: Optional[str] = None   # 空欄なら変更なし
+    is_admin: bool = False
+    is_readonly: bool = False
+
+
 class FormActivityRequest(BaseModel):
     user_id: Optional[str] = None
     担当者: Optional[str] = None
@@ -475,9 +491,99 @@ async def list_admin_users(
             "is_admin": user.is_admin,
             "is_readonly": user.is_readonly,
             "created_at": user.created_at.isoformat() if user.created_at else None,
+            "updated_at": user.updated_at.isoformat() if user.updated_at else None,
         }
         for user in users
     ]
+
+
+def _user_response(user: User) -> dict:
+    return {
+        "id": user.id,
+        "username": user.username,
+        "email": user.email,
+        "is_admin": user.is_admin,
+        "is_readonly": user.is_readonly,
+        "created_at": user.created_at.isoformat() if user.created_at else None,
+        "updated_at": user.updated_at.isoformat() if user.updated_at else None,
+    }
+
+
+@app.post("/admin/users")
+async def admin_create_user(
+    body: AdminUserCreateRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="管理者権限が必要です")
+
+    if db.query(User).filter(User.username == body.username).first():
+        raise HTTPException(status_code=400, detail="このユーザー名は既に使用されています")
+
+    if body.email and db.query(User).filter(User.email == body.email).first():
+        raise HTTPException(status_code=400, detail="このメールアドレスは既に使用されています")
+
+    # 相互排他：管理者 → 閲覧専用を解除
+    is_admin = body.is_admin
+    is_readonly = body.is_readonly
+    if is_admin:
+        is_readonly = False
+
+    new_user = User(
+        username=body.username,
+        email=body.email or None,
+        password_hash=get_password_hash(body.password),
+        is_admin=is_admin,
+        is_readonly=is_readonly,
+    )
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+    return _user_response(new_user)
+
+
+@app.put("/admin/users/{user_id}")
+async def admin_update_user(
+    user_id: int,
+    body: AdminUserUpdateRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="管理者権限が必要です")
+
+    target = db.query(User).filter(User.id == user_id).first()
+    if not target:
+        raise HTTPException(status_code=404, detail="ユーザーが見つかりません")
+
+    # ユーザー名重複チェック（自分自身は除外）
+    if body.username != target.username:
+        if db.query(User).filter(User.username == body.username).first():
+            raise HTTPException(status_code=400, detail="このユーザー名は既に使用されています")
+
+    # メール重複チェック（自分自身は除外）
+    if body.email and body.email != target.email:
+        if db.query(User).filter(User.email == body.email).first():
+            raise HTTPException(status_code=400, detail="このメールアドレスは既に使用されています")
+
+    target.username = body.username
+    target.email = body.email or None
+
+    if body.password and body.password.strip():
+        target.password_hash = get_password_hash(body.password)
+
+    # 相互排他：管理者 → 閲覧専用を解除
+    target.is_admin = body.is_admin
+    target.is_readonly = body.is_readonly
+    if body.is_admin:
+        target.is_readonly = False
+
+    target.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(target)
+    return _user_response(target)
+
 
 @app.post("/admin/users/{user_id}/toggle-readonly")
 async def toggle_readonly_user(

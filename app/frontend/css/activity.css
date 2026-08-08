@@ -202,45 +202,101 @@ button:active {
 }
 
 /* 期間指定UI */
-.date-filter {
-    background: white;
-    padding: 12px;
-    border-radius: 8px;
-    box-shadow: 0 0 10px rgba(0,0,0,0.1);
+/* ===== 絞り込みパネル ===== */
+.filter-panel {
+    background: #fff;
+    border: 1px solid #dde3ec;
+    border-radius: 10px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+    padding: 10px 14px 12px;
     margin-bottom: 15px;
 }
 
-.date-filter-content {
+/* ヘッダー行：タイトル + リセットボタン */
+.filter-panel-header {
     display: flex;
-    align-items: end;
-    gap: 10px;
-    flex-wrap: nowrap;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+}
+.filter-panel-title {
+    font-size: 12px;
+    font-weight: bold;
+    color: #3a7bd5;
+    letter-spacing: 0.04em;
 }
 
-.date-range-inputs {
+/* 全フィルターを横並びに */
+.filter-controls {
     display: flex;
+    align-items: flex-end;
     gap: 10px;
-    align-items: end;
+    flex-wrap: wrap;
 }
 
-.date-input-group {
+/* 各フィルターグループ（ラベル + コントロール） */
+.filter-group {
     display: flex;
     flex-direction: column;
     gap: 4px;
 }
-
-.date-input-group label {
-    font-size: 12px;
-    color: #333;
+.filter-label {
+    font-size: 11px;
     font-weight: bold;
+    color: #555;
+    white-space: nowrap;
 }
 
-.date-input-group input {
-    padding: 8px;
-    border: 1px solid #ddd;
-    border-radius: 4px;
-    font-size: 14px;
-    width: 130px;
+/* 日付グループ内の横並び */
+.filter-date-row {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+.filter-date-input {
+    padding: 6px 7px;
+    border: 1px solid #ccd3de;
+    border-radius: 6px;
+    font-size: 13px;
+    width: 122px;
+    color: #333;
+}
+.filter-date-input:focus {
+    outline: none;
+    border-color: #3a7bd5;
+    box-shadow: 0 0 0 2px rgba(58,123,213,0.15);
+}
+.date-sep {
+    color: #999;
+    font-size: 13px;
+    flex-shrink: 0;
+}
+
+/* 縦の区切り線（日付と他フィルターの間） */
+.filter-divider {
+    width: 1px;
+    height: 32px;
+    background: #dde3ec;
+    flex-shrink: 0;
+    align-self: flex-end;
+    margin: 0 2px;
+}
+
+/* 担当者・種別ドロップダウン */
+.map-filter-select {
+    padding: 6px 8px;
+    border: 1px solid #ccd3de;
+    border-radius: 6px;
+    font-size: 13px;
+    background: #fff;
+    cursor: pointer;
+    color: #333;
+    min-width: 88px;
+}
+.map-filter-select:focus {
+    outline: none;
+    border-color: #3a7bd5;
+    box-shadow: 0 0 0 2px rgba(58,123,213,0.15);
 }
 
 .filter-btn, .reset-filter-btn {
@@ -361,7 +417,6 @@ button:active {
     padding: 6px 10px;
     font-size: 12px;
     cursor: pointer;
-    margin-left: 6px;
     width: auto;
 }
 .readonly-toggle-btn:hover {
@@ -688,21 +743,25 @@ button:active {
         }
     }
     
-    /* 期間指定UIのモバイル対応 */
-    .date-filter-content {
+    /* 絞り込みパネル モバイル対応 */
+    .filter-controls {
         gap: 8px;
-        overflow-x: auto;
     }
-    
-    .date-input-group input {
-        width: 110px;
-        font-size: 13px;
+    .filter-divider {
+        display: none;
     }
-    
-    .date-input-group label {
-        font-size: 11px;
+    .filter-date-input {
+        width: 100px;
+        font-size: 12px;
     }
-    
+    .map-filter-select {
+        font-size: 12px;
+        min-width: 76px;
+    }
+    .map-search-input {
+        width: 130px;
+        font-size: 12px;
+    }
     .filter-btn, .reset-filter-btn {
         padding: 6px 8px;
         font-size: 12px;
@@ -728,36 +787,24 @@ button:active {
     margin: 0;
     white-space: nowrap;
 }
-.team-search-input {
-    flex: 1;
-    min-width: 160px;
-    max-width: 320px;
-    padding: 6px 10px;
-    border: 1px solid #ccc;
-    border-radius: 6px;
-    font-size: 14px;
-    outline: none;
-}
-.team-search-input:focus {
-    border-color: #2196F3;
-    box-shadow: 0 0 0 2px rgba(33,150,243,0.2);
-}
+/* .team-search-input は削除（上部フィルターに統合） */
 
 /* 地図絞込検索ボックス */
 .map-search-input {
-    flex: 1;
-    min-width: 160px;
-    max-width: 280px;
-    padding: 7px 10px;
-    border: 1px solid #ccc;
+    padding: 6px 8px;
+    border: 1px solid #ccd3de;
     border-radius: 6px;
     font-size: 13px;
+    color: #333;
     outline: none;
-    margin-left: auto;
+    width: 160px;
+}
+.map-search-input::placeholder {
+    color: #aaa;
 }
 .map-search-input:focus {
-    border-color: #2196F3;
-    box-shadow: 0 0 0 2px rgba(33,150,243,0.2);
+    border-color: #3a7bd5;
+    box-shadow: 0 0 0 2px rgba(58,123,213,0.15);
 }
 @media (max-width: 767px) {
     .map-search-input {
@@ -956,9 +1003,109 @@ button:active {
     background: #c0392b;
 }
 
+/* ===== ユーザー登録・編集モーダル固有スタイル ===== */
+
+/* 必須マーク */
+.required-mark {
+    color: #e74c3c;
+    margin-left: 2px;
+}
+
+/* 権限チェックボックス群 */
+.permission-checkboxes {
+    display: flex;
+    gap: 20px;
+    padding: 6px 0;
+}
+.checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 14px;
+    cursor: pointer;
+    user-select: none;
+}
+.checkbox-label input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+    accent-color: #3498db;
+}
+.checkbox-label input[type="checkbox"]:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+/* 新規ユーザー登録ボタン（管理者メニュー上部） */
+.add-user-btn {
+    padding: 6px 16px;
+    background: #27ae60;
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: bold;
+    white-space: nowrap;
+}
+.add-user-btn:hover {
+    background: #219150;
+}
+
+/* 管理者テーブル 操作列の編集ボタン */
+.user-edit-btn {
+    padding: 3px 10px;
+    background: #3498db;
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: bold;
+    margin-right: 4px;
+}
+.user-edit-btn:hover {
+    background: #2980b9;
+}
+
+/* 管理者テーブル 操作列（縦スタック・コンパクト） */
+.admin-user-action-cell {
+    padding: 4px 6px !important;
+    vertical-align: middle;
+    width: 76px;
+    min-width: 76px;
+}
+.admin-user-action-cell button {
+    display: block;
+    width: 100%;
+    padding: 3px 2px;
+    font-size: 11px;
+    font-weight: bold;
+    text-align: center;
+    border-radius: 3px;
+    margin: 0 !important;
+    margin-top: 3px !important;
+    border: none;
+    cursor: pointer;
+    color: #fff;
+    line-height: 1.4;
+}
+.admin-user-action-cell button:first-child {
+    margin-top: 0 !important;
+}
+
 @media (max-width: 600px) {
     .modal-box {
         padding: 18px 16px;
+    }
+    .permission-checkboxes {
+        flex-direction: column;
+        gap: 10px;
+    }
+    .admin-user-action-cell button {
+        display: block;
+        margin: 3px 0;
+        width: 100%;
     }
 }
 

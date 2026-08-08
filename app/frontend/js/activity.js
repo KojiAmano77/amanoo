@@ -43,6 +43,8 @@ const activityColorMap = new Map(); // activityId → 現在の色
 const activityLayerMap = new Map(); // activityId → Leafletレイヤー
 const activityDataMap = new Map();  // activityId → 活動データ（地図検索用）
 let mapSearchKeyword = '';
+let mapFilterUser    = '';
+let mapFilterType    = '';
 
 const GPX_TRACK_STYLE = { color: '#FF6600', weight: 4, opacity: 0.85 }; // GPXプレビュー軌跡スタイル
 
@@ -660,8 +662,10 @@ async function loadActivitiesOnMap() {
                 }
             });
 
-            // データ再読み込み後にキーワードフィルタを再適用
-            if (mapSearchKeyword) filterMapActivities(mapSearchKeyword);
+            // 担当者ドロップダウンを生成
+            populateUserFilter(activities);
+            // データ再読み込み後にフィルタを再適用
+            applyMapFilters();
         }
     } catch (error) {
         if (error.message !== 'Unauthorized') {
@@ -829,8 +833,7 @@ async function loadTeamActivities() {
 
         if (response.ok) {
             cachedTeamActivities = await response.json();
-            const keyword = document.getElementById('team-search')?.value || '';
-            displayTeamActivities(applyTeamSearch(cachedTeamActivities, keyword));
+            displayTeamActivities(cachedTeamActivities);
         } else {
             showMessage('データの読み込みに失敗しました', 'error');
         }
@@ -841,20 +844,6 @@ async function loadTeamActivities() {
     }
 }
 
-function applyTeamSearch(activities, keyword) {
-    if (!keyword.trim()) return activities;
-    const q = keyword.trim().toLowerCase();
-    return activities.filter(a =>
-        (a.username || '').toLowerCase().includes(q) ||
-        (a.activity_type || '').toLowerCase().includes(q) ||
-        (a.memo || '').toLowerCase().includes(q) ||
-        (a.location || '').toLowerCase().includes(q)
-    );
-}
-
-function filterTeamActivities(keyword) {
-    displayTeamActivities(applyTeamSearch(cachedTeamActivities, keyword));
-}
 
 // 閲覧専用UIの適用（記録・削除ボタン等を非表示にする）
 function applyReadonlyUI() {
@@ -883,40 +872,65 @@ function applyReadonlyUI() {
 }
 
 // 地図上のGPXログ・マーカーをキーワードでフィルタリング
-function filterMapActivities(keyword) {
-    mapSearchKeyword = keyword;
-    const q = keyword.trim().toLowerCase();
+// 担当者ドロップダウンを活動データから動的生成（現在の選択値を保持）
+function populateUserFilter(activities) {
+    const sel = document.getElementById('map-filter-user');
+    if (!sel) return;
+    const current = sel.value;
+    const users = [...new Set(activities.map(a => a.username).filter(Boolean))].sort();
+    sel.innerHTML = '<option value="">担当者（全員）</option>';
+    users.forEach(u => {
+        const opt = document.createElement('option');
+        opt.value = u;
+        opt.textContent = u;
+        if (u === current) opt.selected = true;
+        sel.appendChild(opt);
+    });
+}
+
+// 担当者・活動種別・フリーワードの3条件AND結合で地図を絞り込む
+function applyMapFilters() {
+    mapFilterUser    = document.getElementById('map-filter-user')?.value  || '';
+    mapFilterType    = document.getElementById('map-filter-type')?.value  || '';
+    mapSearchKeyword = document.getElementById('map-search')?.value       || '';
+
+    const uQ = mapFilterUser;           // 完全一致
+    const tQ = mapFilterType;           // 完全一致
+    const kQ = mapSearchKeyword.trim().toLowerCase();  // 部分一致
 
     activityLayerMap.forEach((layer, id) => {
-        const activity = activityDataMap.get(id);
-        if (!activity) return;
-        const matches = !q ||
-            (activity.username || '').toLowerCase().includes(q) ||
-            (activity.activity_type || '').toLowerCase().includes(q) ||
-            (activity.memo || '').toLowerCase().includes(q) ||
-            (activity.location || '').toLowerCase().includes(q);
-
-        if (matches) {
+        const a = activityDataMap.get(id);
+        if (!a) return;
+        const ok =
+            (!uQ || a.username      === uQ) &&
+            (!tQ || a.activity_type === tQ) &&
+            (!kQ ||
+                (a.memo     || '').toLowerCase().includes(kQ) ||
+                (a.location || '').toLowerCase().includes(kQ));
+        if (ok) {
             if (!map.hasLayer(layer)) layer.addTo(map);
         } else {
             if (map.hasLayer(layer)) map.removeLayer(layer);
         }
     });
 
-    // 学区カバー率をキーワードフィルタ後の活動に連動
+    // 学区カバー率を絞り込み後の活動に連動
     const dateFiltered = cachedAllActivities.filter(a => isDateInRange(a.date));
-    cachedFilteredActivities = q
-        ? dateFiltered.filter(a =>
-            (a.username || '').toLowerCase().includes(q) ||
-            (a.activity_type || '').toLowerCase().includes(q) ||
-            (a.memo || '').toLowerCase().includes(q) ||
-            (a.location || '').toLowerCase().includes(q))
-        : dateFiltered;
+    cachedFilteredActivities = dateFiltered.filter(a =>
+        (!uQ || a.username      === uQ) &&
+        (!tQ || a.activity_type === tQ) &&
+        (!kQ ||
+            (a.memo     || '').toLowerCase().includes(kQ) ||
+            (a.location || '').toLowerCase().includes(kQ))
+    );
 
     if (schoolDistrictsVisible && schoolDistrictData) {
         if (schoolDistrictLayer) { map.removeLayer(schoolDistrictLayer); schoolDistrictLayer = null; }
         renderSchoolDistricts();
     }
+
+    // 支部記録タブも同じ条件で同期更新
+    if (cachedTeamActivities.length) displayTeamActivities(cachedTeamActivities);
 }
 
 // 管理者用ユーザー一覧を読み込み
@@ -938,30 +952,193 @@ async function loadAdminUsers() {
 }
 
 function displayAdminUsers(users) {
-    const tbody = document.getElementById('admin-users-tbody');
+    const tbody      = document.getElementById('admin-users-tbody');
+    const mobileList = document.getElementById('admin-users-mobile');
     if (!tbody) return;
 
-    tbody.innerHTML = '';
+    tbody.innerHTML      = '';
+    if (mobileList) mobileList.innerHTML = '';
 
     users.forEach(user => {
-        const row = tbody.insertRow();
-        const adminBtnText    = user.is_admin    ? '管理者解除'   : '管理者付与';
-        const readonlyBtnText = user.is_readonly ? '閲覧専用解除' : '閲覧専用にする';
+        const adminBtnText    = user.is_admin    ? '管理者解除' : '管理者付与';
+        const readonlyBtnText = user.is_readonly ? '専用解除'   : '閲覧専用付与';
         const adminBadge    = user.is_admin    ? '<span class="admin-badge">管理者</span>'      : '';
         const readonlyBadge = user.is_readonly ? '<span class="readonly-badge">閲覧専用</span>' : '';
-        // 管理者は閲覧専用ボタンを無効化、閲覧専用は管理者付与のみ可能（解除は常に可）
         const readonlyDisabled = user.is_admin ? 'disabled title="管理者は閲覧専用にできません"' : '';
+        const createdAt = user.created_at ? new Date(user.created_at).toLocaleDateString('ja-JP') : '';
+        const updatedAt = user.updated_at ? new Date(user.updated_at).toLocaleDateString('ja-JP') : '—';
+        const userJson  = JSON.stringify(user).replace(/'/g, '&#39;');
 
+        // ── デスクトップ用テーブル行 ──
+        const row = tbody.insertRow();
         row.innerHTML = `
             <td>${user.username}${adminBadge}${readonlyBadge}</td>
             <td>${user.email || ''}</td>
-            <td>${user.created_at ? new Date(user.created_at).toLocaleDateString('ja-JP') : ''}</td>
-            <td>
+            <td style="white-space:nowrap;">${createdAt}</td>
+            <td style="white-space:nowrap;">${updatedAt}</td>
+            <td class="admin-user-action-cell">
+                <button class="user-edit-btn" onclick='openUserModal(${userJson})'>編集</button>
                 <button class="admin-toggle-btn ${user.is_admin ? 'active' : ''}" onclick="toggleAdminUser(${user.id})">${adminBtnText}</button>
                 <button class="readonly-toggle-btn ${user.is_readonly ? 'active' : ''}" onclick="toggleReadonlyUser(${user.id})" ${readonlyDisabled}>${readonlyBtnText}</button>
             </td>
         `;
+
+        // ── モバイル用カード ──
+        if (!mobileList) return;
+        const card = document.createElement('div');
+        card.className = 'activity-card';
+
+        const cardContent = document.createElement('div');
+        cardContent.innerHTML = `
+            <div class="activity-header">${user.username}${adminBadge}${readonlyBadge}</div>
+            ${user.email ? `<div class="activity-details">📧 ${user.email}</div>` : ''}
+            <div class="activity-details">登録日: ${createdAt}　更新日: ${updatedAt}</div>
+        `;
+
+        const cardActions = document.createElement('div');
+        cardActions.className = 'action-buttons';
+        cardActions.style.flexWrap = 'wrap';
+
+        const editBtn = document.createElement('button');
+        editBtn.className = 'user-edit-btn';
+        editBtn.textContent = '編集';
+        editBtn.onclick = () => openUserModal(user);
+
+        const adminBtn = document.createElement('button');
+        adminBtn.className = `admin-toggle-btn${user.is_admin ? ' active' : ''}`;
+        adminBtn.textContent = adminBtnText;
+        adminBtn.onclick = () => toggleAdminUser(user.id);
+
+        const readonlyBtn = document.createElement('button');
+        readonlyBtn.className = `readonly-toggle-btn${user.is_readonly ? ' active' : ''}`;
+        readonlyBtn.textContent = readonlyBtnText;
+        readonlyBtn.onclick = () => toggleReadonlyUser(user.id);
+        if (user.is_admin) {
+            readonlyBtn.disabled = true;
+            readonlyBtn.title = '管理者は閲覧専用にできません';
+        }
+
+        cardActions.appendChild(editBtn);
+        cardActions.appendChild(adminBtn);
+        cardActions.appendChild(readonlyBtn);
+
+        card.appendChild(cardContent);
+        card.appendChild(cardActions);
+        mobileList.appendChild(card);
     });
+}
+
+// ===== 管理者専用：ユーザー登録・編集ダイアログ =====
+
+let editingUserId = null; // null = 新規登録, number = 既存ユーザー編集
+
+function openUserModal(user = null) {
+    editingUserId = user ? user.id : null;
+
+    const title  = document.getElementById('user-modal-title');
+    const okBtn  = document.getElementById('user-modal-ok-btn');
+    const pwLabel = document.getElementById('user-modal-pw-label');
+    const pwInput = document.getElementById('user-modal-password');
+
+    if (user) {
+        title.textContent = '✏️ ユーザー編集';
+        okBtn.textContent = '保存';
+        pwLabel.innerHTML = 'パスワード（変更する場合のみ入力）';
+        pwInput.placeholder = '変更しない場合は空欄のまま';
+        document.getElementById('user-modal-username').value  = user.username || '';
+        document.getElementById('user-modal-email').value     = user.email    || '';
+        document.getElementById('user-modal-password').value  = '';
+        document.getElementById('user-modal-is-admin').checked    = !!user.is_admin;
+        document.getElementById('user-modal-is-readonly').checked = !!user.is_readonly;
+    } else {
+        title.textContent = '👤 ユーザー登録';
+        okBtn.textContent = '登録';
+        pwLabel.innerHTML = 'パスワード <span class="required-mark">*</span>';
+        pwInput.placeholder = 'パスワード';
+        document.getElementById('user-modal-username').value  = '';
+        document.getElementById('user-modal-email').value     = '';
+        document.getElementById('user-modal-password').value  = '';
+        document.getElementById('user-modal-is-admin').checked    = false;
+        document.getElementById('user-modal-is-readonly').checked = false;
+    }
+
+    _syncPermissionUI();
+    document.getElementById('user-modal').style.display = 'flex';
+}
+
+function closeUserModal() {
+    document.getElementById('user-modal').style.display = 'none';
+    editingUserId = null;
+}
+
+// is_admin / is_readonly の相互排他を UI 上で反映
+function onPermissionChange(changed) {
+    const adminChk    = document.getElementById('user-modal-is-admin');
+    const readonlyChk = document.getElementById('user-modal-is-readonly');
+    if (changed === 'admin' && adminChk.checked) {
+        readonlyChk.checked  = false;
+    }
+    if (changed === 'readonly' && readonlyChk.checked) {
+        adminChk.checked = false;
+    }
+    _syncPermissionUI();
+}
+
+function _syncPermissionUI() {
+    const adminChk    = document.getElementById('user-modal-is-admin');
+    const readonlyChk = document.getElementById('user-modal-is-readonly');
+    readonlyChk.disabled = adminChk.checked;
+    adminChk.disabled    = readonlyChk.checked;
+}
+
+async function submitUserModal() {
+    const username  = document.getElementById('user-modal-username').value.trim();
+    const email     = document.getElementById('user-modal-email').value.trim();
+    const password  = document.getElementById('user-modal-password').value;
+    const isAdmin   = document.getElementById('user-modal-is-admin').checked;
+    const isReadonly = document.getElementById('user-modal-is-readonly').checked;
+
+    if (!username) { showMessage('ユーザー名を入力してください', 'error'); return; }
+    if (!editingUserId && !password) { showMessage('パスワードを入力してください', 'error'); return; }
+
+    const okBtn = document.getElementById('user-modal-ok-btn');
+    okBtn.disabled = true;
+    okBtn.textContent = '処理中…';
+
+    const body = {
+        username,
+        email: email || null,
+        is_admin: isAdmin,
+        is_readonly: isReadonly,
+    };
+    if (!editingUserId || password.trim()) {
+        body.password = password;
+    }
+
+    try {
+        const url    = editingUserId ? `/admin/users/${editingUserId}` : '/admin/users';
+        const method = editingUserId ? 'PUT' : 'POST';
+
+        const response = await fetchWithAuth(url, {
+            method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        });
+
+        if (response.ok) {
+            showMessage(editingUserId ? 'ユーザー情報を更新しました' : 'ユーザーを登録しました', 'success');
+            closeUserModal();
+            loadAdminUsers();
+        } else {
+            const err = await response.json().catch(() => ({}));
+            showMessage(err.detail || '処理に失敗しました', 'error');
+        }
+    } catch (error) {
+        if (error.message !== 'Unauthorized') showMessage('ネットワークエラー', 'error');
+    } finally {
+        okBtn.disabled = false;
+        okBtn.textContent = editingUserId ? '保存' : '登録';
+    }
 }
 
 window.toggleAdminUser = async function(userId) {
@@ -1096,9 +1273,19 @@ function displayTeamActivities(activities) {
         actionHeader.classList.toggle('hidden', !currentUserIsAdmin);
     }
 
-    // 期間フィルタを適用し、新しい順に並べる
+    // 期間・担当者・種別・キーワードの4条件AND結合で絞り込み（上部フィルターと連動）
+    const _kQ = mapSearchKeyword.trim().toLowerCase();
     const filteredActivities = activities
-        .filter(activity => isDateInRange(activity.date))
+        .filter(a => {
+            if (!isDateInRange(a.date)) return false;
+            if (mapFilterUser && a.username      !== mapFilterUser) return false;
+            if (mapFilterType && a.activity_type !== mapFilterType) return false;
+            if (_kQ && !(
+                (a.memo     || '').toLowerCase().includes(_kQ) ||
+                (a.location || '').toLowerCase().includes(_kQ)
+            )) return false;
+            return true;
+        })
         .sort((a, b) => new Date(b.date) - new Date(a.date));
 
     filteredActivities.forEach(activity => {
@@ -1798,9 +1985,15 @@ function applyDateFilter() {
 // 期間フィルタをリセット（デフォルト範囲で有効化）
 function resetDateFilter() {
     setDefaultDateRange();
-    // 地図検索ボックスもクリア
-    const mapSearchEl = document.getElementById('map-search');
-    if (mapSearchEl) mapSearchEl.value = '';
+    // 地図フィルターをすべてクリア
+    const selUser = document.getElementById('map-filter-user');
+    const selType = document.getElementById('map-filter-type');
+    const searchEl = document.getElementById('map-search');
+    if (selUser)  selUser.value  = '';
+    if (selType)  selType.value  = '';
+    if (searchEl) searchEl.value = '';
+    mapFilterUser    = '';
+    mapFilterType    = '';
     mapSearchKeyword = '';
     // データを再読み込み
     refreshAllData();
@@ -1995,7 +2188,14 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // 期間フィルタのデフォルト値を設定
     setDefaultDateRange();
-    
+
+    // ブラウザのセッション復元でフィルターに前回値が残らないよう明示クリア
+    const _mapSearch = document.getElementById('map-search');
+    if (_mapSearch) _mapSearch.value = '';
+    mapSearchKeyword = '';
+    mapFilterUser    = '';
+    mapFilterType    = '';
+
     // フォームのイベントリスナーを設定
     setupActivityForm();
     
@@ -2016,4 +2216,12 @@ document.addEventListener('DOMContentLoaded', function() {
     setTimeout(() => {
         validateFormAndUpdateButton();
     }, 500);
+});
+
+// Chrome のパスワードマネージャーは DOMContentLoaded より後に自動入力するため
+// window.load イベントでも map-search を強制クリアする
+window.addEventListener('load', () => {
+    const el = document.getElementById('map-search');
+    if (el) el.value = '';
+    mapSearchKeyword = '';
 });
