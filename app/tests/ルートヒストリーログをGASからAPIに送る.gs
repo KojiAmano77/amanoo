@@ -64,17 +64,19 @@ ${participantLine}活動日：${date}
   switch (activity) {
 
     case "ポスティング": {
-      const count = a["ポスティング枚数"] || "";
-      const chirashi = a["ビラの種類"] || "";
+      const { detail, total } = buildPostingDetail(a);
       const tewatashi = a["ビラ手渡し枚数"] || "";
-      const postArea = a["ポスティングエリア（住所等）"] || "";
-      const school = a["小学校学区"] || "";
-      const report = a["活動報告（ポスティング）"] || "";
+      const postArea  = a["ポスティングエリア（住所等）"] || "";
+      const school    = a["小学校学区"] || "";
+      const report    = a["活動報告（ポスティング）"] || "";
       const tewatashiPart = tewatashi ? `（内手渡し：${tewatashi}枚）` : "";
+      const resultLine = total > 0
+        ? `${detail}  合計${total}枚 ${tewatashiPart}`.trim()
+        : `（枚数未記入）${tewatashiPart}`.trim();
 
       return `${header}
 活動場所：${postArea} ${school}
-活動結果：${chirashi} 計${count}枚 ${tewatashiPart}
+活動結果：${resultLine}
 ${report}
 `;
     }
@@ -293,10 +295,8 @@ function postActivityToWebApp(e, answers) {
   let memo = '';
   switch (activity) {
     case 'ポスティング': {
-      const chirashi = answers['ビラの種類'] || '';
-      const count    = answers['ポスティング枚数'] || '';
-      if (chirashi && count) memo = `${chirashi} ${count}枚`;
-      else memo = chirashi || count;
+      const { detail, total } = buildPostingDetail(answers);
+      if (total > 0) memo = `${detail} 計${total}枚`;
       break;
     }
     case 'あいさつ回り': {
@@ -332,6 +332,25 @@ function postActivityToWebApp(e, answers) {
   const response = UrlFetchApp.fetch(url, options);
   Logger.log('WebAPIステータス: ' + response.getResponseCode());
   Logger.log('WebAPIレスポンス: ' + response.getContentText());
+}
+
+// ポスティング枚数の明細を組み立てるヘルパー
+// 戻り値: { detail: "伊藤議員 市政報告ビラ：50枚  参政党ビラ：20枚", total: 70 }
+function buildPostingDetail(a) {
+  const BILLS = [
+    { key: "伊藤議員 市政報告ビラのポスティング枚数", label: "伊藤議員 市政報告ビラ" },
+    { key: "神田議員 市政報告ビラのポスティング枚数", label: "神田議員 市政報告ビラ" },
+    { key: "藤本議員 町政報告ビラのポスティング枚数", label: "藤本議員 町政報告ビラ" },
+    { key: "参政党ビラのポスティング枚数",            label: "参政党ビラ"             },
+  ];
+
+  const distributed = BILLS
+    .map(b => ({ label: b.label, count: parseInt(a[b.key] || "0") || 0 }))
+    .filter(b => b.count > 0);
+
+  const total  = distributed.reduce((s, b) => s + b.count, 0);
+  const detail = distributed.map(b => `${b.label}：${b.count}枚`).join("  ");
+  return { detail, total };
 }
 
 // "HH:MM:SS" → "HH:MM" に整形

@@ -29,7 +29,7 @@ async def send_password_reset_email(to_email: str, reset_token: str):
         <p>このリンクは24時間有効です。</p>
         <p>もしこのリクエストに心当たりがない場合は、このメールを無視してください。</p>
         <hr>
-        <p>愛知第12支部活動記録システム</p>
+        <p>愛知第12支部活動記録マップ</p>
       </body>
     </html>
     """
@@ -45,7 +45,7 @@ async def send_password_reset_email(to_email: str, reset_token: str):
     このリンクは24時間有効です。
     もしこのリクエストに心当たりがない場合は、このメールを無視してください。
     
-    愛知第12支部活動記録システム
+    愛知第12支部活動記録マップ
     """
     
     message = MIMEMultipart("alternative")
@@ -85,7 +85,7 @@ async def send_password_changed_email(to_email: str):
         <p>変更日時: {datetime.now().strftime('%Y年%m月%d日 %H:%M')}</p>
         <p>もしこの変更にお心当たりがない場合は、すぐにサポートまでご連絡ください。</p>
         <hr>
-        <p>愛知第12支部活動記録システム</p>
+        <p>愛知第12支部活動記録マップ</p>
       </body>
     </html>
     """
@@ -98,7 +98,7 @@ async def send_password_changed_email(to_email: str):
     
     もしこの変更にお心当たりがない場合は、すぐにサポートまでご連絡ください。
     
-    愛知第12支部活動記録システム
+    愛知第12支部活動記録マップ
     """
     
     message = MIMEMultipart("alternative")

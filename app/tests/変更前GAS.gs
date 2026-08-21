@@ -1,9 +1,9 @@
 // const roomId1 = "405011703"; // 天野マイチャット
 const roomId2 = "284847688"; // 12支部チャット
-const roomId3 = "420318628"; // 自動投稿用チャット
+const roomId3 = "420318628"; // テスト用チャット
 const CHATWORK_API_BASE = "https://api.chatwork.com/v2/rooms";
 const CHATWORK_TOKEN = "16da790394232028d85de8c15cf49d0d"; // 自動投稿APIトークン
-const CHATROOM_ID = roomId3;
+const CHATROOM_ID = roomId2;
 
 // ★ 日付を「2026/2/27(金)」形式に変換する関数（ゼロ埋めなし）
 function formatJapaneseDate(dateStr) {
@@ -147,8 +147,9 @@ ${report}
     }
 
     case "お茶会":
+    case "定例会":
     case "地域活動": {
-      const report = a["活動報告（お茶会、地域活動）"] || "";
+      const report = a["活動報告（お茶会、定例会、地域活動）"] || "";
       return `${header}
 ${report}
 `;
