@@ -2150,7 +2150,7 @@ async function toggleSchoolDistricts() {
     if (!schoolDistrictsVisible) {
         if (!schoolDistrictData) {
             try {
-                const res = await fetch('/static/school_districts.geojson');
+                const res = await fetch('/static/school_districts.geojson?v=20260823');
                 if (!res.ok) {
                     showMessage('学区データが見つかりません。school_districts.geojsonを配置してください。', 'error');
                     return;
