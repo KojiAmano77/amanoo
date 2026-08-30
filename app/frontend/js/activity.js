@@ -19,6 +19,11 @@ let pinModeActive = false;
 let schoolDistrictLayer = null;
 let schoolDistrictsVisible = false;
 let schoolDistrictData = null;
+
+// 市議員ピンレイヤー
+let councilMemberLayer   = null;
+let councilMembersVisible = false;
+let councilMemberData    = null;
 let cachedAllActivities = [];
 let cachedFilteredActivities = [];
 const DISTRICT_LABEL_MIN_ZOOM = 13; // これ以上のズームでのみ学校名を表示
@@ -2178,6 +2183,70 @@ async function toggleSchoolDistricts() {
     }
 }
 
+// --- 市議員ピンレイヤー ---
+
+function renderCouncilMembers() {
+    // 色ごとの政党ラベル（アイコン色で判別）
+    const partyLabel = {
+        '#0288D1': '青',
+        '#7CB342': '緑',
+        '#F57C00': '橙',
+    };
+
+    councilMemberLayer = L.geoJSON(councilMemberData, {
+        pointToLayer: (feature, latlng) => {
+            const color = feature.properties.color || '#888';
+            return L.circleMarker(latlng, {
+                radius: 9,
+                fillColor: color,
+                color: '#fff',
+                weight: 2,
+                opacity: 1,
+                fillOpacity: 0.85
+            });
+        },
+        onEachFeature: (feature, layer) => {
+            const p = feature.properties;
+            const label = partyLabel[p.color] || '';
+            layer.bindTooltip(p.name, { permanent: false, direction: 'top' });
+            layer.bindPopup(
+                `<b>${p.name}</b><br>` +
+                `📍 ${p.address}<br>` +
+                (label ? `<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${p.color};margin-right:4px;"></span>${label}` : '')
+            );
+        }
+    }).addTo(map);
+}
+
+async function toggleCouncilMembers() {
+    if (!councilMembersVisible) {
+        if (!councilMemberData) {
+            try {
+                const res = await fetch('/static/council_members.geojson?v=20260830');
+                if (!res.ok) {
+                    showMessage('市議員データが見つかりません。', 'error');
+                    return;
+                }
+                councilMemberData = await res.json();
+            } catch (e) {
+                showMessage('市議員データの読み込みに失敗しました。', 'error');
+                return;
+            }
+        }
+        if (councilMemberLayer) {
+            councilMemberLayer.addTo(map);
+        } else {
+            renderCouncilMembers();
+        }
+        councilMembersVisible = true;
+        document.getElementById('council-toggle-btn').classList.add('active');
+    } else {
+        if (councilMemberLayer) map.removeLayer(councilMemberLayer);
+        councilMembersVisible = false;
+        document.getElementById('council-toggle-btn').classList.remove('active');
+    }
+}
+
 // 初期化
 document.addEventListener('DOMContentLoaded', function() {
     // 今日の日付をデフォルトに設定
@@ -2202,7 +2271,10 @@ document.addEventListener('DOMContentLoaded', function() {
     initMaps();
     loadMyActivities();
     // 地図上に既存の活動記録アイコンを表示し、完了後に学区レイヤーをON
-    loadActivitiesOnMap().then(() => toggleSchoolDistricts());
+    loadActivitiesOnMap().then(() => {
+        toggleSchoolDistricts();
+        toggleCouncilMembers();
+    });
     
     // 管理者タブの可視性を初期化
     getCurrentUser().then(() => {
