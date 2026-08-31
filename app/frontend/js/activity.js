@@ -20,7 +20,7 @@ let schoolDistrictLayer = null;
 let schoolDistrictsVisible = false;
 let schoolDistrictData = null;
 
-// 市議員ピンレイヤー
+// 議員ピンレイヤー
 let councilMemberLayer   = null;
 let councilMembersVisible = false;
 let councilMemberData    = null;
@@ -2115,9 +2115,31 @@ function updateDistrictLabels() {
     });
 }
 
+// 各学区に議員が居住しているか判定 → { 学区名: true/false }
+function computeCouncilDistrictHighlight(geojson, nameKey) {
+    const result = {};
+    geojson.features.forEach(f => { result[f.properties[nameKey] || '不明'] = false; });
+    if (!councilMemberData) return result;
+    councilMemberData.features.forEach(member => {
+        const pt = turf.point(member.geometry.coordinates);
+        geojson.features.forEach(f => {
+            const name = f.properties[nameKey] || '不明';
+            if (!result[name]) {
+                try { if (turf.booleanPointInPolygon(pt, f)) result[name] = true; } catch(e) {}
+            }
+        });
+    });
+    return result;
+}
+
 function renderSchoolDistricts() {
     const geojson = schoolDistrictData;
     const { countMap, nameKey } = computeDistrictCoverage(geojson, cachedFilteredActivities);
+
+    // 議員ハイライトモード時は1回だけ計算してクロージャで参照
+    const councilHighlight = (councilMembersVisible && councilMemberData)
+        ? computeCouncilDistrictHighlight(geojson, nameKey)
+        : null;
 
     // GPX軌跡（overlayPane z:400）より下のペインに配置してクリックを通過させる
     if (!map.getPane('districtPane')) {
@@ -2129,6 +2151,13 @@ function renderSchoolDistricts() {
         pane: 'districtPane',
         style: feature => {
             const name = feature.properties[nameKey] || '不明';
+            if (councilHighlight !== null) {
+                // 議員ハイライトモード：議員がいる→赤、いない→無色
+                return councilHighlight[name]
+                    ? { color: '#b71c1c', weight: 2.5, fillColor: '#ef5350', fillOpacity: 0.45 }
+                    : { color: '#555',    weight: 1.5, fillColor: '#fff',     fillOpacity: 0 };
+            }
+            // 通常モード（GPXカバー率）
             const fillColor = districtFillColor(countMap[name] || 0);
             return { color: '#555', weight: 1.5, fillColor, fillOpacity: 0.4 };
         },
@@ -2188,8 +2217,8 @@ async function toggleSchoolDistricts() {
 function renderCouncilMembers() {
     // 色ごとの政党ラベル（アイコン色で判別）
     const partyLabel = {
-        '#0288D1': '青',
-        '#7CB342': '緑',
+        '#0288D1': '市議',
+        '#7CB342': '県議',
         '#F57C00': '橙',
     };
 
@@ -2224,12 +2253,12 @@ async function toggleCouncilMembers() {
             try {
                 const res = await fetch('/static/council_members.geojson?v=20260830');
                 if (!res.ok) {
-                    showMessage('市議員データが見つかりません。', 'error');
+                    showMessage('議員データが見つかりません。', 'error');
                     return;
                 }
                 councilMemberData = await res.json();
             } catch (e) {
-                showMessage('市議員データの読み込みに失敗しました。', 'error');
+                showMessage('議員データの読み込みに失敗しました。', 'error');
                 return;
             }
         }
@@ -2240,10 +2269,20 @@ async function toggleCouncilMembers() {
         }
         councilMembersVisible = true;
         document.getElementById('council-toggle-btn').classList.add('active');
+        // 学区表示中なら赤ハイライトで再描画
+        if (schoolDistrictsVisible && schoolDistrictData) {
+            if (schoolDistrictLayer) { map.removeLayer(schoolDistrictLayer); schoolDistrictLayer = null; }
+            renderSchoolDistricts();
+        }
     } else {
         if (councilMemberLayer) map.removeLayer(councilMemberLayer);
         councilMembersVisible = false;
         document.getElementById('council-toggle-btn').classList.remove('active');
+        // 学区表示中なら通常カバー率表示に戻す
+        if (schoolDistrictsVisible && schoolDistrictData) {
+            if (schoolDistrictLayer) { map.removeLayer(schoolDistrictLayer); schoolDistrictLayer = null; }
+            renderSchoolDistricts();
+        }
     }
 }
 
