@@ -117,7 +117,7 @@ document.addEventListener('DOMContentLoaded', function() {
             e.preventDefault();
             document.getElementById('reset-form-section').style.display = 'none';
             document.getElementById('login-form').parentElement.style.display = 'block';
-            document.getElementById('register-form').parentElement.style.display = 'block';
+            // 新規登録UIはセキュリティのため非表示のまま維持する（表示を戻さない）
         });
     }
 });

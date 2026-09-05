@@ -2154,7 +2154,7 @@ function renderSchoolDistricts() {
             if (councilHighlight !== null) {
                 // 議員ハイライトモード：議員がいる→赤、いない→無色
                 return councilHighlight[name]
-                    ? { color: '#b71c1c', weight: 2.5, fillColor: '#ef5350', fillOpacity: 0.45 }
+                    ? { color: '#b71c1c', weight: 2.5, fillColor: '#ef5350', fillOpacity: 0.18 }
                     : { color: '#555',    weight: 1.5, fillColor: '#fff',     fillOpacity: 0 };
             }
             // 通常モード（GPXカバー率）
@@ -2219,7 +2219,7 @@ function renderCouncilMembers() {
     const partyLabel = {
         '#0288D1': '市議',
         '#7CB342': '県議',
-        '#F57C00': '橙',
+        '#F57C00': '市議',
     };
 
     councilMemberLayer = L.geoJSON(councilMemberData, {

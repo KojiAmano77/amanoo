@@ -26,7 +26,36 @@ function onFormSubmit(e) {
   const message = buildMessage(answers);
 
   postToChatwork(CHATROOM_ID, message, imageBlobs);
+  registerWebAppUser(answers);      // Webアプリのアカウント自動発行（未登録の場合のみ）
   postActivityToWebApp(e, answers);
+}
+
+// 投稿者名（スペース除去）をアカウント名としてWebアプリにユーザー登録
+// 既に同名アカウントがあれば何もしない。新規作成時はメールでパスワードが通知される。
+function registerWebAppUser(answers) {
+  const username = (answers['投稿者'] || '').replace(/[ 　]/g, '');
+  const email = (answers['メールアドレス'] || '').trim();
+
+  if (!username) {
+    Logger.log('ユーザー登録スキップ: 投稿者名が空');
+    return;
+  }
+
+  const url = 'https://sanseitoaichi12.f5.si/api/forms/register-user';
+  const options = {
+    method: 'post',
+    contentType: 'application/json',
+    payload: JSON.stringify({ username: username, email: email }),
+    muteHttpExceptions: true
+  };
+
+  try {
+    const response = UrlFetchApp.fetch(url, options);
+    Logger.log('ユーザー登録ステータス: ' + response.getResponseCode());
+    Logger.log('ユーザー登録レスポンス: ' + response.getContentText());
+  } catch (err) {
+    Logger.log('ユーザー登録エラー: ' + err.toString());
+  }
 }
 
 // 回答をマッピング
@@ -225,6 +254,42 @@ function getImageBlobsFromForm(e) {
   return blobs;
 }
 
+// GPXファイル名を組み立てる（例: 20260830_天野_岡崎市羽幡町_広幡小学校区.gpx）
+function buildGpxFileName(answers) {
+  const activity = answers['活動種類'] || '';
+
+  // 日付を YYYYMMDD 形式に変換
+  const rawDate = answers['日付'] || '';
+  const dateStr = rawDate.replace(/-/g, '').substring(0, 8); // "2026-08-30" → "20260830"
+
+  // 投稿者（スペース除去）
+  const poster = (answers['投稿者'] || '').replace(/[ 　]/g, '');
+
+  // 活動種類ごとにエリアフィールドを選択
+  let area = '';
+  switch (activity) {
+    case 'ポスティング':   area = answers['ポスティングエリア（住所等）'] || ''; break;
+    case 'あいさつ回り':  area = answers['活動エリア（住所等）'] || ''; break;
+    case '駅立ち':
+    case '辻立ち':        area = answers['活動エリア（駅名,交差点名等）'] || ''; break;
+    case '街頭演説':      area = answers['演説場所（駅名,交差点名等）'] || ''; break;
+    case '街宣車活動':    area = answers['活動エリア'] || ''; break;
+    case 'ポスター貼り':  area = answers['住所'] || ''; break;
+    default:              area = '';
+  }
+
+  // 小学校区（ポスティングのみ存在）
+  const school = answers['小学校学区'] || '';
+
+  // ファイル名に使えない文字を除去（/ \ : * ? " < > |）
+  const sanitize = s => s.replace(/[/\\:*?"<>|]/g, '').trim();
+
+  const parts = [dateStr, sanitize(poster), sanitize(area)];
+  if (school) parts.push(sanitize(school));
+
+  return parts.filter(Boolean).join('_') + '.gpx';
+}
+
 // WebアプリAPIにGPX付き活動記録を登録
 function postActivityToWebApp(e, answers) {
   // GPXファイル取得
@@ -243,6 +308,12 @@ function postActivityToWebApp(e, answers) {
 
           Logger.log('GPX fileId: ' + fileId);
           const file = DriveApp.getFileById(fileId);
+
+          // ファイル名を意味のある名前に変更してGoogle Driveに保存
+          const newName = buildGpxFileName(answers);
+          file.setName(newName);
+          Logger.log('GPXファイル名変更: ' + newName);
+
           gpxContent = file.getBlob().getDataAsString('UTF-8');
           Logger.log('GPX取得成功: ' + gpxContent.substring(0, 80));
         }

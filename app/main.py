@@ -17,7 +17,7 @@ import xml.etree.ElementTree as ET
 
 from database import get_db, create_tables, User, Activity, PasswordResetToken, Event
 from auth import get_password_hash, verify_password, create_access_token, get_current_user
-from email_service import send_password_reset_email, send_password_changed_email
+from email_service import send_password_reset_email, send_password_changed_email, send_new_account_email
 
 def _parse_activity_date(date_value: Any) -> datetime:
     if isinstance(date_value, datetime):
@@ -69,6 +69,11 @@ def _extract_gpx_points(gpx_content: str) -> Optional[List[List[float]]]:
             points.append([float(lon), float(lat)])
 
     return points if points else None
+
+
+def _generate_numeric_password(length: int = 6) -> str:
+    """スマホでの入力・高齢者の視認性を考慮し数字のみの短いパスワードを生成"""
+    return "".join(secrets.choice("0123456789") for _ in range(length))
 
 
 def _get_or_create_api_user(db: Session, requested_username: Optional[str]) -> User:
@@ -313,6 +318,55 @@ async def reset_password(
         print(f"パスワード変更完了メール送信エラー: {e}")
     
     return {"message": "パスワードが正常に変更されました"}
+
+
+class FormUserRegisterRequest(BaseModel):
+    username: str
+    email: Optional[str] = None
+
+
+@app.post("/api/forms/register-user", status_code=status.HTTP_200_OK)
+async def register_user_from_form(
+    payload: FormUserRegisterRequest,
+    db: Session = Depends(get_db)
+):
+    """Googleフォーム投稿者名でアカウントを自動発行し、初期パスワードをメール通知する。
+    既に同名アカウントが存在する場合は何もしない。"""
+    username = (payload.username or "").strip()
+    email = (payload.email or "").strip() or None
+
+    if not username:
+        raise HTTPException(status_code=400, detail="ユーザー名は必須です")
+
+    existing = db.query(User).filter(User.username == username).first()
+    if existing:
+        return {"created": False, "message": "既存アカウントのため作成しませんでした"}
+
+    # メールアドレスは unique 制約があるため、既に他ユーザーが使用中なら付与しない
+    if email:
+        email_taken = db.query(User).filter(User.email == email).first()
+        if email_taken:
+            email = None
+
+    password = _generate_numeric_password()
+
+    user = User(
+        username=username,
+        email=email,
+        password_hash=get_password_hash(password),
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+
+    email_sent = False
+    if email:
+        try:
+            email_sent = await send_new_account_email(email, username, password)
+        except Exception as e:
+            print(f"新規アカウント通知メール送信エラー: {e}")
+
+    return {"created": True, "username": username, "email_sent": email_sent}
 
 # Googleフォーム/Apps Script用の登録API
 @app.post("/api/forms/activity", status_code=status.HTTP_201_CREATED)
