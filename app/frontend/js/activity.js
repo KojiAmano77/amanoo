@@ -2009,9 +2009,9 @@ function resetDateFilter() {
 function setDefaultDateRange() {
     const today = new Date();
 
-    // 開始日: 1か月前
+    // 開始日: 6か月前
     const oneMonthAgo = new Date(today);
-    oneMonthAgo.setMonth(today.getMonth() - 1);
+    oneMonthAgo.setMonth(today.getMonth() - 6);
     const startDateString = oneMonthAgo.getFullYear() + '-' +
         String(oneMonthAgo.getMonth() + 1).padStart(2, '0') + '-' +
         String(oneMonthAgo.getDate()).padStart(2, '0');
