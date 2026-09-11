@@ -29,7 +29,7 @@ async def send_password_reset_email(to_email: str, reset_token: str):
         <p>このリンクは24時間有効です。</p>
         <p>もしこのリクエストに心当たりがない場合は、このメールを無視してください。</p>
         <hr>
-        <p>愛知第12支部活動記録マップ</p>
+        <p>愛知12支部活動記録マップ</p>
       </body>
     </html>
     """
@@ -45,7 +45,7 @@ async def send_password_reset_email(to_email: str, reset_token: str):
     このリンクは24時間有効です。
     もしこのリクエストに心当たりがない場合は、このメールを無視してください。
     
-    愛知第12支部活動記録マップ
+    愛知12支部活動記録マップ
     """
     
     message = MIMEMultipart("alternative")
@@ -76,7 +76,7 @@ async def send_password_reset_email(to_email: str, reset_token: str):
 async def send_new_account_email(to_email: str, username: str, password: str):
     """Googleフォーム経由で新規発行したアカウントの初期パスワードを通知"""
     login_url = "https://sanseitoaichi12.f5.si/"
-    subject = "参政党愛知第12支部活動記録マップのアカウントが発行されました"
+    subject = "参政党愛知12支部活動記録マップのアカウントが発行されました"
 
     html_content = f"""
     <html>
@@ -90,7 +90,7 @@ async def send_new_account_email(to_email: str, username: str, password: str):
 
           <div style="padding:24px;">
             <p style="color:#5a4632; font-size:14px; line-height:1.7;">
-              参政党愛知第12支部活動記録マップへようこそ！<br>
+              参政党愛知12支部活動記録マップへようこそ！<br>
               あなたのアカウントが発行されました✨
             </p>
 
@@ -111,7 +111,7 @@ async def send_new_account_email(to_email: str, username: str, password: str):
           </div>
 
           <div style="background:#fff3e0; text-align:center; padding:14px; font-size:12px; color:#a1785a;">
-            参政党 愛知第12支部活動記録マップ 🍊
+            参政党 愛知12支部活動記録マップ 🍊
           </div>
         </div>
       </body>
@@ -121,7 +121,7 @@ async def send_new_account_email(to_email: str, username: str, password: str):
     text_content = f"""
     アカウント発行のお知らせ
 
-    愛知第12支部活動記録マップのアカウントが作成されました。
+    愛知12支部活動記録マップのアカウントが作成されました。
     ログインID：{username}
     パスワード：{password}
 
@@ -130,7 +130,7 @@ async def send_new_account_email(to_email: str, username: str, password: str):
     パスワードを変更したい場合は、ログイン画面の「パスワードをお忘れですか？」から
     このメールアドレス（{to_email}）を入力すると変更できます。
 
-    愛知第12支部活動記録マップ
+    愛知12支部活動記録マップ
     """
 
     message = MIMEMultipart("alternative")
@@ -167,7 +167,7 @@ async def send_password_changed_email(to_email: str):
         <p>変更日時: {datetime.now().strftime('%Y年%m月%d日 %H:%M')}</p>
         <p>もしこの変更にお心当たりがない場合は、すぐにサポートまでご連絡ください。</p>
         <hr>
-        <p>愛知第12支部活動記録マップ</p>
+        <p>愛知12支部活動記録マップ</p>
       </body>
     </html>
     """
@@ -180,7 +180,7 @@ async def send_password_changed_email(to_email: str):
     
     もしこの変更にお心当たりがない場合は、すぐにサポートまでご連絡ください。
     
-    愛知第12支部活動記録マップ
+    愛知12支部活動記録マップ
     """
     
     message = MIMEMultipart("alternative")

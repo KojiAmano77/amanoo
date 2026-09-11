@@ -155,7 +155,7 @@ class FormActivityRequest(BaseModel):
 
 
 app = FastAPI(
-    title="愛知第12支部活動記録マップ",
+    title="愛知12支部活動記録マップ",
     description="支部活動記録マップ",
     version="1.0.0"
 )
