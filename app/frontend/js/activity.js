@@ -50,6 +50,7 @@ const activityDataMap = new Map();  // activityId → 活動データ（地図�
 let mapSearchKeyword = '';
 let mapFilterUser    = '';
 let mapFilterType    = '';
+let mapKeywordChecks = []; // チェック済みビラ種別キーワード（AND条件）
 
 const GPX_TRACK_STYLE = { color: '#FF6600', weight: 4, opacity: 0.85 }; // GPXプレビュー軌跡スタイル
 
@@ -893,11 +894,19 @@ function populateUserFilter(activities) {
     });
 }
 
-// 担当者・活動種別・フリーワードの3条件AND結合で地図を絞り込む
+// チェック済みビラ種別キーワードをすべて含むか判定（AND条件）
+function matchesKeywordChecks(a) {
+    if (!mapKeywordChecks.length) return true;
+    const haystack = ((a.memo || '') + ' ' + (a.location || '')).toLowerCase();
+    return mapKeywordChecks.every(kw => haystack.includes(kw.toLowerCase()));
+}
+
+// 担当者・活動種別・フリーワード・ビラ種別チェックの4条件AND結合で地図を絞り込む
 function applyMapFilters() {
     mapFilterUser    = document.getElementById('map-filter-user')?.value  || '';
     mapFilterType    = document.getElementById('map-filter-type')?.value  || '';
     mapSearchKeyword = document.getElementById('map-search')?.value       || '';
+    mapKeywordChecks = Array.from(document.querySelectorAll('.keyword-check:checked')).map(cb => cb.value);
 
     const uQ = mapFilterUser;           // 完全一致
     const tQ = mapFilterType;           // 完全一致
@@ -911,7 +920,8 @@ function applyMapFilters() {
             (!tQ || a.activity_type === tQ) &&
             (!kQ ||
                 (a.memo     || '').toLowerCase().includes(kQ) ||
-                (a.location || '').toLowerCase().includes(kQ));
+                (a.location || '').toLowerCase().includes(kQ)) &&
+            matchesKeywordChecks(a);
         if (ok) {
             if (!map.hasLayer(layer)) layer.addTo(map);
         } else {
@@ -926,7 +936,8 @@ function applyMapFilters() {
         (!tQ || a.activity_type === tQ) &&
         (!kQ ||
             (a.memo     || '').toLowerCase().includes(kQ) ||
-            (a.location || '').toLowerCase().includes(kQ))
+            (a.location || '').toLowerCase().includes(kQ)) &&
+        matchesKeywordChecks(a)
     );
 
     if (schoolDistrictsVisible && schoolDistrictData) {
@@ -1278,7 +1289,7 @@ function displayTeamActivities(activities) {
         actionHeader.classList.toggle('hidden', !currentUserIsAdmin);
     }
 
-    // 期間・担当者・種別・キーワードの4条件AND結合で絞り込み（上部フィルターと連動）
+    // 期間・担当者・種別・キーワード・ビラ種別チェックの5条件AND結合で絞り込み（上部フィルターと連動）
     const _kQ = mapSearchKeyword.trim().toLowerCase();
     const filteredActivities = activities
         .filter(a => {
@@ -1289,6 +1300,7 @@ function displayTeamActivities(activities) {
                 (a.memo     || '').toLowerCase().includes(_kQ) ||
                 (a.location || '').toLowerCase().includes(_kQ)
             )) return false;
+            if (!matchesKeywordChecks(a)) return false;
             return true;
         })
         .sort((a, b) => new Date(b.date) - new Date(a.date));
@@ -1997,9 +2009,11 @@ function resetDateFilter() {
     if (selUser)  selUser.value  = '';
     if (selType)  selType.value  = '';
     if (searchEl) searchEl.value = '';
+    document.querySelectorAll('.keyword-check:checked').forEach(cb => cb.checked = false);
     mapFilterUser    = '';
     mapFilterType    = '';
     mapSearchKeyword = '';
+    mapKeywordChecks = [];
     // データを再読み込み
     refreshAllData();
     showMessage('期間フィルタをリセットしました', 'success');

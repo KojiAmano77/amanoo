@@ -77,6 +77,17 @@
                         oninput="applyMapFilters()">
                 </div>
 
+                <!-- ビラ種別チェックボックス -->
+                <div class="filter-group filter-group-checkboxes">
+                    <span class="filter-label">📋 ビラ種別</span>
+                    <div class="keyword-checkbox-row">
+                        <label class="keyword-checkbox"><input type="checkbox" class="keyword-check" value="伊藤" onchange="applyMapFilters()">伊藤議員</label>
+                        <label class="keyword-checkbox"><input type="checkbox" class="keyword-check" value="神田" onchange="applyMapFilters()">神田議員</label>
+                        <label class="keyword-checkbox"><input type="checkbox" class="keyword-check" value="藤本" onchange="applyMapFilters()">藤本議員</label>
+                        <label class="keyword-checkbox"><input type="checkbox" class="keyword-check" value="参政党" onchange="applyMapFilters()">参政党ビラ</label>
+                    </div>
+                </div>
+
             </div>
         </div>
 
@@ -306,6 +317,6 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
     <script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
-    <script src="/static/js/activity.js?v=31"></script>
+    <script src="/static/js/activity.js?v=32"></script>
 </body>
 </html>

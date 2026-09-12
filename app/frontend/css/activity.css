@@ -240,6 +240,25 @@ button:active {
     flex-direction: column;
     gap: 4px;
 }
+
+/* ビラ種別チェックボックス */
+.keyword-checkbox-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 10px;
+}
+.keyword-checkbox {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    font-size: 13px;
+    color: #444;
+    cursor: pointer;
+    white-space: nowrap;
+}
+.keyword-checkbox input {
+    cursor: pointer;
+}
 .filter-label {
     font-size: 11px;
     font-weight: bold;
@@ -749,6 +768,23 @@ button:active {
     }
     .filter-divider {
         display: none;
+    }
+    /* ビラ種別チェックボックス：他グループと横並びで幅を奪い合わないよう単独行にし、
+       その分コンパクトにして4つを1行に収める */
+    .filter-group-checkboxes {
+        flex-basis: 100%;
+    }
+    .keyword-checkbox-row {
+        gap: 3px 6px;
+    }
+    .keyword-checkbox {
+        font-size: 11px;
+        gap: 2px;
+    }
+    .keyword-checkbox input {
+        width: 13px;
+        height: 13px;
+        margin: 0;
     }
     .filter-date-input {
         width: 100px;
