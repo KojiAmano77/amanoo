@@ -50,7 +50,7 @@ const activityDataMap = new Map();  // activityId → 活動データ（地図�
 let mapSearchKeyword = '';
 let mapFilterUser    = '';
 let mapFilterType    = '';
-let mapKeywordChecks = []; // チェック済みビラ種別キーワード（AND条件）
+let mapKeywordChecks = []; // チェック済みポスティングビラ種別キーワード（AND条件）
 
 const GPX_TRACK_STYLE = { color: '#FF6600', weight: 4, opacity: 0.85 }; // GPXプレビュー軌跡スタイル
 
@@ -894,14 +894,16 @@ function populateUserFilter(activities) {
     });
 }
 
-// チェック済みビラ種別キーワードをすべて含むか判定（AND条件）
+// チェック済みポスティングビラ種別キーワードのいずれかを含むか判定（OR条件）
+// ※ ポスティング記録にのみ適用。他の活動種別（辻立ち・あいさつ回り等）は常に表示対象とする
 function matchesKeywordChecks(a) {
-    if (!mapKeywordChecks.length) return true;
+    if (a.activity_type !== 'ポスティング') return true;
+    if (!mapKeywordChecks.length) return false; // 全解除時はポスティングを非表示
     const haystack = ((a.memo || '') + ' ' + (a.location || '')).toLowerCase();
-    return mapKeywordChecks.every(kw => haystack.includes(kw.toLowerCase()));
+    return mapKeywordChecks.some(kw => haystack.includes(kw.toLowerCase()));
 }
 
-// 担当者・活動種別・フリーワード・ビラ種別チェックの4条件AND結合で地図を絞り込む
+// 担当者・活動種別・フリーワードはAND、ビラ種別チェック（ポスティングのみ対象）はORで地図を絞り込む
 function applyMapFilters() {
     mapFilterUser    = document.getElementById('map-filter-user')?.value  || '';
     mapFilterType    = document.getElementById('map-filter-type')?.value  || '';
@@ -1289,7 +1291,7 @@ function displayTeamActivities(activities) {
         actionHeader.classList.toggle('hidden', !currentUserIsAdmin);
     }
 
-    // 期間・担当者・種別・キーワード・ビラ種別チェックの5条件AND結合で絞り込み（上部フィルターと連動）
+    // 期間・担当者・種別・キーワードはAND、ポスティングビラ種別チェック（ポスティングのみ対象）はORで絞り込み（上部フィルターと連動）
     const _kQ = mapSearchKeyword.trim().toLowerCase();
     const filteredActivities = activities
         .filter(a => {
@@ -2009,11 +2011,13 @@ function resetDateFilter() {
     if (selUser)  selUser.value  = '';
     if (selType)  selType.value  = '';
     if (searchEl) searchEl.value = '';
-    document.querySelectorAll('.keyword-check:checked').forEach(cb => cb.checked = false);
+    // ポスティングビラ種別チェックボックスはデフォルトの「全チェック」状態に戻す
+    const keywordChecks = document.querySelectorAll('.keyword-check');
+    keywordChecks.forEach(cb => cb.checked = true);
     mapFilterUser    = '';
     mapFilterType    = '';
     mapSearchKeyword = '';
-    mapKeywordChecks = [];
+    mapKeywordChecks = Array.from(keywordChecks).map(cb => cb.value);
     // データを再読み込み
     refreshAllData();
     showMessage('期間フィルタをリセットしました', 'success');

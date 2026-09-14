@@ -241,7 +241,7 @@ button:active {
     gap: 4px;
 }
 
-/* ビラ種別チェックボックス */
+/* ポスティングビラ種別チェックボックス */
 .keyword-checkbox-row {
     display: flex;
     flex-wrap: wrap;
@@ -769,7 +769,7 @@ button:active {
     .filter-divider {
         display: none;
     }
-    /* ビラ種別チェックボックス：他グループと横並びで幅を奪い合わないよう単独行にし、
+    /* ポスティングビラ種別チェックボックス：他グループと横並びで幅を奪い合わないよう単独行にし、
        その分コンパクトにして4つを1行に収める */
     .filter-group-checkboxes {
         flex-basis: 100%;
@@ -787,7 +787,7 @@ button:active {
         margin: 0;
     }
     .filter-date-input {
-        width: 100px;
+        width: 116px;
         font-size: 12px;
     }
     .map-filter-select {
