@@ -1,9 +1,11 @@
 // const roomId1 = "405011703"; // 天野マイチャット
 const roomId2 = "284847688"; // 12支部チャット
 const roomId3 = "420318628"; // テスト用チャット
+const roomId4 = "446130978"; // 藤本さん応援チャット
 const CHATWORK_API_BASE = "https://api.chatwork.com/v2/rooms";
 const CHATWORK_TOKEN = "16da790394232028d85de8c15cf49d0d"; // 自動投稿APIトークン
-const CHATROOM_ID = roomId2;
+// 投稿先チャットルームIDの配列（複数指定すると全部に連続投稿される。1件なら従来通り1回のみ）
+const CHATROOM_IDS = [roomId2];
 
 // ★ 日付を「2026/2/27(金)」形式に変換する関数（ゼロ埋めなし）
 function formatJapaneseDate(dateStr) {
@@ -20,12 +22,26 @@ function formatJapaneseDate(dateStr) {
   return `${y}/${m}/${d}(${w})`;
 }
 
+// フォームのチェックボックス回答（配列 or 単一文字列）に指定の選択肢が含まれるか判定
+function includesOption(value, target) {
+  if (!value) return false;
+  const arr = Array.isArray(value) ? value : [value];
+  return arr.includes(target);
+}
+
 function onFormSubmit(e) {
   const answers = extractAnswers(e);
   const imageBlobs = getImageBlobsFromForm(e);
   const message = buildMessage(answers);
 
-  postToChatwork(CHATROOM_ID, message, imageBlobs);
+  // 基本の投稿先に、「追加投稿チャット」で選択されたルームを合成
+  const targetRoomIds = [...CHATROOM_IDS];
+  if (includesOption(answers['追加投稿チャット'], '活動報告-藤本和美（岡崎幸田県議）チャット')) {
+    targetRoomIds.push(roomId4);
+  }
+
+  // 配列内のチャットルームすべてに連続投稿（要素数1なら従来通り1回のみ）
+  targetRoomIds.forEach(roomId => postToChatwork(roomId, message, imageBlobs));
   registerWebAppUser(answers);      // Webアプリのアカウント自動発行（未登録の場合のみ）
   postActivityToWebApp(e, answers);
 }
