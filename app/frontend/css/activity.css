@@ -27,13 +27,13 @@ body {
 
 #calendar-link {
     font-size: 1.5rem;
-    color: #FF8C00; /* オレンジ色に変更 */
+    color: #FF9800; /* オレンジ色に変更 */
     text-decoration: none;
     margin-left: 20px;
 }
 
 #calendar-link:hover {
-    color: #007bff;
+    color: #FF9800;
 }
 .container {
     max-width: 1200px;
@@ -61,7 +61,7 @@ body {
     flex: 1 1 100%;
 }
 .submit-btn {
-    background-color: #007bff;
+    background-color: #FF9800;
     color: white;
     border: none;
     padding: 12px 24px;
@@ -71,7 +71,7 @@ body {
     font-weight: bold;
 }
 .submit-btn:hover {
-    background-color: #0056b3;
+    background-color: #F57C00;
 }
 .submit-btn:disabled {
     background-color: #6c757d;
@@ -123,7 +123,7 @@ input, select, textarea, button {
 .location-display.selected {
     background-color: #e8f5e8;
     color: #333;
-    border-color: #4CAF50;
+    border-color: #FF9800;
 }
 textarea {
     resize: vertical;
@@ -131,7 +131,7 @@ textarea {
     font-family: inherit;
 }
 button {
-    background-color: #4CAF50;
+    background-color: #FF9800;
     color: white;
     border: none;
     cursor: pointer;
@@ -139,10 +139,10 @@ button {
     transition: background-color 0.3s;
 }
 button:hover {
-    background-color: #45a049;
+    background-color: #F57C00;
 }
 button:active {
-    background-color: #3d8b40;
+    background-color: #E65100;
 }
 /* ログインユーザー表示 */
 .user-info {
@@ -222,7 +222,7 @@ button:active {
 .filter-panel-title {
     font-size: 12px;
     font-weight: bold;
-    color: #3a7bd5;
+    color: #FF9800;
     letter-spacing: 0.04em;
 }
 
@@ -282,8 +282,8 @@ button:active {
 }
 .filter-date-input:focus {
     outline: none;
-    border-color: #3a7bd5;
-    box-shadow: 0 0 0 2px rgba(58,123,213,0.15);
+    border-color: #FF9800;
+    box-shadow: 0 0 0 2px rgba(255,152,0,0.15);
 }
 .date-sep {
     color: #999;
@@ -314,8 +314,8 @@ button:active {
 }
 .map-filter-select:focus {
     outline: none;
-    border-color: #3a7bd5;
-    box-shadow: 0 0 0 2px rgba(58,123,213,0.15);
+    border-color: #FF9800;
+    box-shadow: 0 0 0 2px rgba(255,152,0,0.15);
 }
 
 .filter-btn, .reset-filter-btn {
@@ -332,12 +332,12 @@ button:active {
 }
 
 .filter-btn {
-    background-color: #007bff;
+    background-color: #FF9800;
     color: white;
 }
 
 .filter-btn:hover {
-    background-color: #0056b3;
+    background-color: #F57C00;
 }
 
 .reset-filter-btn {
@@ -374,9 +374,9 @@ button:active {
 }
 
 .tab.active {
-    background: #4CAF50; /* 緑色 */
+    background: #FF9800; /* 緑色 */
     color: white;        /* 白文字でコントラスト */
-    border-bottom-color: #388E3C;
+    border-bottom-color: #E65100;
     font-weight: bold;
 }
 
@@ -527,7 +527,7 @@ button:active {
 }
 
 .gpx-upload-btn {
-    background-color: #2196F3;
+    background-color: #FF9800;
     padding: 8px 12px;
     font-size: 13px;
     font-weight: bold;
@@ -545,7 +545,7 @@ button:active {
 }
 
 .gpx-upload-btn:hover {
-    background-color: #1976D2;
+    background-color: #F57C00;
 }
 
 .gpx-clear-btn {
@@ -572,12 +572,12 @@ button:active {
 }
 
 .gpx-info {
-    background-color: #E3F2FD;
-    border: 1px solid #90CAF9;
+    background-color: #FFF3E0;
+    border: 1px solid #FFCC80;
     border-radius: 6px;
     padding: 8px 12px;
     font-size: 14px;
-    color: #1565C0;
+    color: #E65100;
     margin-bottom: 10px;
 }
 
@@ -589,14 +589,14 @@ button:active {
 }
 
 .map-toggle-btn {
-    background-color: #2196F3;
+    background-color: #FF9800;
     margin-top: 5px;
     padding: 8px;
     font-size: 14px;
 }
 
 .map-toggle-btn:hover {
-    background-color: #1976D2;
+    background-color: #F57C00;
 }
 
 /* 活動リスト（モバイル対応） */
@@ -617,14 +617,14 @@ button:active {
 }
 
 .location-clickable {
-    color: #007bff;
+    color: #FF9800;
     cursor: pointer;
     text-decoration: underline;
     transition: color 0.2s ease;
 }
 
 .location-clickable:hover {
-    color: #0056b3;
+    color: #F57C00;
     text-decoration: none;
 }
 .action-buttons {
@@ -839,8 +839,8 @@ button:active {
     color: #aaa;
 }
 .map-search-input:focus {
-    border-color: #3a7bd5;
-    box-shadow: 0 0 0 2px rgba(58,123,213,0.15);
+    border-color: #FF9800;
+    box-shadow: 0 0 0 2px rgba(255,152,0,0.15);
 }
 @media (max-width: 767px) {
     .map-search-input {
@@ -869,12 +869,12 @@ button:active {
     white-space: nowrap;
 }
 
-/* トグルON状態のボタン */
+/* トグルON状態のボタン（OFF状態=通常のオレンジより一段濃い色でON/OFFを区別） */
 .gpx-upload-btn.active {
-    background-color: #4caf50;
+    background-color: #E65100;
 }
 .gpx-upload-btn.active:hover {
-    background-color: #388e3c;
+    background-color: #BF360C;
 }
 
 /* 地図全画面表示 */
@@ -896,7 +896,7 @@ button:active {
     font-size: 18px;
     width: 34px;
     height: 34px;
-    background: #2196F3 !important;
+    background: #FF9800 !important;
     color: white;
     border: none;
     cursor: pointer;
@@ -906,7 +906,7 @@ button:active {
     line-height: 1;
 }
 .map-fullscreen-btn:hover {
-    background: #1976D2 !important;
+    background: #F57C00 !important;
 }
 
 /* ===== 活動記録編集モーダル（管理者専用） ===== */
@@ -934,7 +934,7 @@ button:active {
     margin: 0 0 18px;
     font-size: 1.1rem;
     color: #2c3e50;
-    border-bottom: 2px solid #3498db;
+    border-bottom: 2px solid #FF9800;
     padding-bottom: 10px;
 }
 .modal-form {
@@ -964,8 +964,8 @@ button:active {
 .modal-field input:focus,
 .modal-field select:focus {
     outline: none;
-    border-color: #3498db;
-    box-shadow: 0 0 0 2px rgba(52,152,219,0.2);
+    border-color: #FF9800;
+    box-shadow: 0 0 0 2px rgba(255,152,0,0.2);
 }
 .modal-actions {
     display: flex;
@@ -987,7 +987,7 @@ button:active {
 }
 .modal-ok-btn {
     padding: 8px 24px;
-    background: #3498db;
+    background: #FF9800;
     color: #fff;
     border: none;
     border-radius: 6px;
@@ -996,7 +996,7 @@ button:active {
     font-weight: bold;
 }
 .modal-ok-btn:hover {
-    background: #2980b9;
+    background: #F57C00;
 }
 .modal-ok-btn:disabled {
     background: #aaa;
@@ -1027,10 +1027,10 @@ button:active {
     margin-top: 3px;
 }
 .team-edit-btn {
-    background: #3498db;
+    background: #FF9800;
 }
 .team-edit-btn:hover {
-    background: #2980b9;
+    background: #F57C00;
 }
 .team-delete-btn {
     background: #e74c3c;
@@ -1065,7 +1065,7 @@ button:active {
     width: 16px;
     height: 16px;
     cursor: pointer;
-    accent-color: #3498db;
+    accent-color: #FF9800;
 }
 .checkbox-label input[type="checkbox"]:disabled {
     opacity: 0.4;
@@ -1091,7 +1091,7 @@ button:active {
 /* 管理者テーブル 操作列の編集ボタン */
 .user-edit-btn {
     padding: 3px 10px;
-    background: #3498db;
+    background: #FF9800;
     color: #fff;
     border: none;
     border-radius: 4px;
@@ -1101,7 +1101,7 @@ button:active {
     margin-right: 4px;
 }
 .user-edit-btn:hover {
-    background: #2980b9;
+    background: #F57C00;
 }
 
 /* 管理者テーブル 操作列（縦スタック・コンパクト） */

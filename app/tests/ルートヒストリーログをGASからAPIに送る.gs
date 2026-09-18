@@ -2,6 +2,7 @@
 const roomId2 = "284847688"; // 12支部チャット
 const roomId3 = "420318628"; // テスト用チャット
 const roomId4 = "446130978"; // 藤本さん応援チャット
+const roomId5 = "441626371"; // 愛知東活動報告チャット
 const CHATWORK_API_BASE = "https://api.chatwork.com/v2/rooms";
 const CHATWORK_TOKEN = "16da790394232028d85de8c15cf49d0d"; // 自動投稿APIトークン
 // 投稿先チャットルームIDの配列（複数指定すると全部に連続投稿される。1件なら従来通り1回のみ）

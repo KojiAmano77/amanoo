@@ -49,7 +49,7 @@ input, button, select {
     font-size: 16px;
 }
 button {
-    background-color: #4CAF50;
+    background-color: #FF9800;
     color: white;
     border: none;
     cursor: pointer;
@@ -57,10 +57,10 @@ button {
     transition: background-color 0.3s;
 }
 button:hover {
-    background-color: #45a049;
+    background-color: #F57C00;
 }
 button:active {
-    background-color: #3d8b40;
+    background-color: #E65100;
 }
 .hidden {
     display: none;
