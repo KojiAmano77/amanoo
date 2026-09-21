@@ -331,7 +331,7 @@ async def register_user_from_form(
     db: Session = Depends(get_db)
 ):
     """Googleフォーム投稿者名でアカウントを自動発行し、初期パスワードをメール通知する。
-    既に同名アカウントが存在する場合は何もしない。"""
+    既に同名アカウントが存在する場合、またはメールアドレスが未入力の場合は何もしない。"""
     username = (payload.username or "").strip()
     email = (payload.email or "").strip() or None
 
@@ -341,6 +341,10 @@ async def register_user_from_form(
     existing = db.query(User).filter(User.username == username).first()
     if existing:
         return {"created": False, "message": "既存アカウントのため作成しませんでした"}
+
+    # メールアドレスが無いとパスワード通知ができず中途半端なアカウントになるため作成しない
+    if not email:
+        return {"created": False, "message": "メールアドレス未入力のため作成しませんでした"}
 
     # メールアドレスは unique 制約があるため、既に他ユーザーが使用中なら付与しない
     if email:
