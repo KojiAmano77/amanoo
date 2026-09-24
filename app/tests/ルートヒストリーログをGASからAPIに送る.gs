@@ -4,8 +4,11 @@ const roomId3 = "420318628"; // テスト用チャット
 const roomId4 = "446130978"; // 藤本さん応援チャット
 const roomId5 = "441626371"; // 愛知東活動報告チャット
 const CHATWORK_API_BASE = "https://api.chatwork.com/v2/rooms";
-const CHATWORK_TOKEN = "16da790394232028d85de8c15cf49d0d"; // 自動投稿APIトークン
-const GEOAPIFY_API_KEY = "1b275026d271452081d69b9598d8bad5"; // 軌跡地図画像生成用（Geoapify Static Maps API）
+// トークン・APIキーはコードに直接書かず、スクリプト プロパティから読み込む
+// （初回のみ setupScriptProperties() を実行して設定。詳細は同関数のコメント参照）
+const scriptProps = PropertiesService.getScriptProperties();
+const CHATWORK_TOKEN = scriptProps.getProperty('CHATWORK_TOKEN'); // 自動投稿APIトークン
+const GEOAPIFY_API_KEY = scriptProps.getProperty('GEOAPIFY_API_KEY'); // 軌跡地図画像生成用（Geoapify Static Maps API）
 
 // 画像リサイズ用（Cloudinary、unsigned upload preset方式）
 // Chatworkが大きすぎる画像のサムネイル生成に失敗する問題への対策。
@@ -16,6 +19,25 @@ const IMAGE_RESIZE_THRESHOLD_BYTES = 1080 * 1920; // これを超えるサイズ
 const IMAGE_MAX_DIMENSION = 1920; // リサイズ後の最大辺（px）。縦横比は維持、これより小さい画像は拡大しない
 // 投稿先チャットルームIDの配列（複数指定すると全部に連続投稿される。1件なら従来通り1回のみ）
 const CHATROOM_IDS = [roomId2];
+
+// ============================================================
+// ★★★ 初回セットアップ用 ★★★
+// トークン・APIキーをスクリプト プロパティに保存する（コードには残らない）。
+//
+// 手順:
+// 1. 下記の 'ここに現在の値を貼り付け' の部分を、実際のトークン・キーに書き換える
+// 2. GASエディタ上部の関数選択で setupScriptProperties を選び、▷実行 を1回だけ押す
+// 3. 実行できたら、貼り付けた値は削除してこの関数はそのまま（空でも）放置してOK
+//    ※一度実行すればプロジェクトの「スクリプト プロパティ」に保存され、
+//      このコード上に値を残しておく必要はない
+// ============================================================
+function setupScriptProperties() {
+  PropertiesService.getScriptProperties().setProperties({
+    'CHATWORK_TOKEN':   'ここに現在の値を貼り付け',
+    'GEOAPIFY_API_KEY': 'ここに現在の値を貼り付け'
+  });
+  Logger.log('スクリプト プロパティを設定しました');
+}
 
 // ★ 日付を「2026/2/27(金)」形式に変換する関数（ゼロ埋めなし）
 function formatJapaneseDate(dateStr) {
@@ -452,7 +474,7 @@ function generateTrackMapImage(gpxContent) {
       Logger.log('軌跡地図生成エラー: HTTP ' + response.getResponseCode() + ' ' + response.getContentText().substring(0, 200));
       return null;
     }
-    return response.getBlob().setContentType('image/jpeg').setName('軌跡地図.jpg');
+    return response.getBlob().setContentType('image/jpeg').setName('routeMap.jpg');
   } catch (err) {
     Logger.log('軌跡地図生成エラー: ' + err.toString());
     return null;
