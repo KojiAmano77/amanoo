@@ -1,9 +1,13 @@
 // const roomId1 = "405011703"; // 天野マイチャット
 const roomId2 = "284847688"; // 12支部チャット
 const roomId3 = "420318628"; // テスト用チャット
+const roomId4 = "446130978"; // 藤本さん応援チャット
+const roomId5 = "441626371"; // 愛知東活動報告チャット
 const CHATWORK_API_BASE = "https://api.chatwork.com/v2/rooms";
 const CHATWORK_TOKEN = "16da790394232028d85de8c15cf49d0d"; // 自動投稿APIトークン
-const CHATROOM_ID = roomId2;
+const GEOAPIFY_API_KEY = "1b275026d271452081d69b9598d8bad5"; // 軌跡地図画像生成用（Geoapify Static Maps API）
+// 投稿先チャットルームIDの配列（複数指定すると全部に連続投稿される。1件なら従来通り1回のみ）
+const CHATROOM_IDS = [roomId2];
 
 // ★ 日付を「2026/2/27(金)」形式に変換する関数（ゼロ埋めなし）
 function formatJapaneseDate(dateStr) {
@@ -20,13 +24,61 @@ function formatJapaneseDate(dateStr) {
   return `${y}/${m}/${d}(${w})`;
 }
 
+// フォームのチェックボックス回答（配列 or 単一文字列）に指定の選択肢が含まれるか判定
+function includesOption(value, target) {
+  if (!value) return false;
+  const arr = Array.isArray(value) ? value : [value];
+  return arr.includes(target);
+}
+
 function onFormSubmit(e) {
   const answers = extractAnswers(e);
   const imageBlobs = getImageBlobsFromForm(e);
   const message = buildMessage(answers);
+  const gpxContent = getGpxContentFromForm(e, answers);
 
-  postToChatwork(CHATROOM_ID, message, imageBlobs);
-  postActivityToWebApp(e, answers);
+  // GPXがあれば軌跡地図画像を自動生成し、手動添付画像と合わせて投稿する
+  const trackImage = gpxContent ? generateTrackMapImage(gpxContent) : null;
+  const allImages = trackImage ? imageBlobs.concat([trackImage]) : imageBlobs;
+
+  // 基本の投稿先に、「追加投稿チャット」で選択されたルームを合成
+  const targetRoomIds = [...CHATROOM_IDS];
+  if (includesOption(answers['追加投稿チャット'], '活動報告-藤本和美（岡崎幸田県議）チャット')) {
+    targetRoomIds.push(roomId4);
+  }
+
+  // 配列内のチャットルームすべてに連続投稿（要素数1なら従来通り1回のみ）
+  targetRoomIds.forEach(roomId => postToChatwork(roomId, message, allImages));
+  registerWebAppUser(answers);      // Webアプリのアカウント自動発行（未登録の場合のみ）
+  postActivityToWebApp(e, answers, gpxContent);
+}
+
+// 投稿者名（スペース除去）をアカウント名としてWebアプリにユーザー登録
+// 既に同名アカウントがあれば何もしない。新規作成時はメールでパスワードが通知される。
+function registerWebAppUser(answers) {
+  const username = (answers['投稿者'] || '').replace(/[ 　]/g, '');
+  const email = (answers['メールアドレス'] || '').trim();
+
+  if (!username) {
+    Logger.log('ユーザー登録スキップ: 投稿者名が空');
+    return;
+  }
+
+  const url = 'https://sanseitoaichi12.f5.si/api/forms/register-user';
+  const options = {
+    method: 'post',
+    contentType: 'application/json',
+    payload: JSON.stringify({ username: username, email: email }),
+    muteHttpExceptions: true
+  };
+
+  try {
+    const response = UrlFetchApp.fetch(url, options);
+    Logger.log('ユーザー登録ステータス: ' + response.getResponseCode());
+    Logger.log('ユーザー登録レスポンス: ' + response.getContentText());
+  } catch (err) {
+    Logger.log('ユーザー登録エラー: ' + err.toString());
+  }
 }
 
 // 回答をマッピング
@@ -225,10 +277,44 @@ function getImageBlobsFromForm(e) {
   return blobs;
 }
 
-// WebアプリAPIにGPX付き活動記録を登録
-function postActivityToWebApp(e, answers) {
-  // GPXファイル取得
-  let gpxContent = null;
+// GPXファイル名を組み立てる（例: 20260830_天野_岡崎市羽幡町_広幡小学校区.gpx）
+function buildGpxFileName(answers) {
+  const activity = answers['活動種類'] || '';
+
+  // 日付を YYYYMMDD 形式に変換
+  const rawDate = answers['日付'] || '';
+  const dateStr = rawDate.replace(/-/g, '').substring(0, 8); // "2026-08-30" → "20260830"
+
+  // 投稿者（スペース除去）
+  const poster = (answers['投稿者'] || '').replace(/[ 　]/g, '');
+
+  // 活動種類ごとにエリアフィールドを選択
+  let area = '';
+  switch (activity) {
+    case 'ポスティング':   area = answers['ポスティングエリア（住所等）'] || ''; break;
+    case 'あいさつ回り':  area = answers['活動エリア（住所等）'] || ''; break;
+    case '駅立ち':
+    case '辻立ち':        area = answers['活動エリア（駅名,交差点名等）'] || ''; break;
+    case '街頭演説':      area = answers['演説場所（駅名,交差点名等）'] || ''; break;
+    case '街宣車活動':    area = answers['活動エリア'] || ''; break;
+    case 'ポスター貼り':  area = answers['住所'] || ''; break;
+    default:              area = '';
+  }
+
+  // 小学校区（ポスティングのみ存在）
+  const school = answers['小学校学区'] || '';
+
+  // ファイル名に使えない文字を除去（/ \ : * ? " < > |）
+  const sanitize = s => s.replace(/[/\\:*?"<>|]/g, '').trim();
+
+  const parts = [dateStr, sanitize(poster), sanitize(area)];
+  if (school) parts.push(sanitize(school));
+
+  return parts.filter(Boolean).join('_') + '.gpx';
+}
+
+// フォーム回答からGPXファイルの中身を取得（ファイル名も意味のある名前にリネームする）
+function getGpxContentFromForm(e, answers) {
   const responses = e.response.getItemResponses();
 
   for (const r of responses) {
@@ -243,8 +329,15 @@ function postActivityToWebApp(e, answers) {
 
           Logger.log('GPX fileId: ' + fileId);
           const file = DriveApp.getFileById(fileId);
-          gpxContent = file.getBlob().getDataAsString('UTF-8');
+
+          // ファイル名を意味のある名前に変更してGoogle Driveに保存
+          const newName = buildGpxFileName(answers);
+          file.setName(newName);
+          Logger.log('GPXファイル名変更: ' + newName);
+
+          const gpxContent = file.getBlob().getDataAsString('UTF-8');
           Logger.log('GPX取得成功: ' + gpxContent.substring(0, 80));
+          return gpxContent;
         }
       } catch (err) {
         Logger.log('GPX取得エラー: ' + err.toString());
@@ -252,7 +345,72 @@ function postActivityToWebApp(e, answers) {
       break;
     }
   }
+  return null;
+}
 
+// GPXの中身から軌跡（トラック）付きの静的地図画像を生成する（Geoapify Static Maps API使用）
+// 失敗時・座標が取れない場合は null を返す
+function generateTrackMapImage(gpxContent) {
+  try {
+    // <trkpt lat="..." lon="..."> を正規表現で抽出（XMLパースより軽量・namespace非依存）
+    // lat/lonの属性順序に依存しないよう、タグ内の属性文字列を取ってから個別に検索する
+    const points = [];
+    const trkptRegex = /<trkpt\b([^>]*)>/g;
+    let m;
+    while ((m = trkptRegex.exec(gpxContent)) !== null) {
+      const attrs = m[1];
+      const latMatch = attrs.match(/\blat="([-\d.]+)"/);
+      const lonMatch = attrs.match(/\blon="([-\d.]+)"/);
+      if (latMatch && lonMatch) {
+        points.push([lonMatch[1], latMatch[1]]); // [lon, lat] の順（Geoapify仕様）
+      }
+    }
+    if (points.length < 2) {
+      Logger.log('軌跡地図生成スキップ: 座標点が不足 (' + points.length + '点)');
+      return null;
+    }
+
+    // 座標が多いトラックでもリクエストボディが極端に大きくならないよう、念のため上限を設けて間引く
+    // （POST方式のためGET時のようなURL長制限[2048文字]は受けないが、安全のため上限は残す）
+    const MAX_POINTS = 1000;
+    const step = Math.max(1, Math.ceil(points.length / MAX_POINTS));
+    const sampled = points.filter((_, i) => i % step === 0);
+
+    // GAS標準のUrlFetchApp（GET）はURLが2048文字を超えると
+    // "Limit Exceeded: URLFetch URL Length" で失敗するため、
+    // 座標データをURLではなくPOSTのJSONボディで送る方式に変更
+    const payload = {
+      width: 600,
+      height: 400,
+      style: 'osm-carto',
+      geometries: [{
+        type: 'polyline',
+        linecolor: '#ff6600',
+        linewidth: 5,
+        value: sampled.map(p => ({ lon: parseFloat(p[0]), lat: parseFloat(p[1]) }))
+      }]
+    };
+
+    const url = 'https://maps.geoapify.com/v1/staticmap?apiKey=' + GEOAPIFY_API_KEY;
+    const response = UrlFetchApp.fetch(url, {
+      method: 'post',
+      contentType: 'application/json',
+      payload: JSON.stringify(payload),
+      muteHttpExceptions: true
+    });
+    if (response.getResponseCode() !== 200) {
+      Logger.log('軌跡地図生成エラー: HTTP ' + response.getResponseCode() + ' ' + response.getContentText().substring(0, 200));
+      return null;
+    }
+    return response.getBlob().setContentType('image/jpeg').setName('軌跡地図.jpg');
+  } catch (err) {
+    Logger.log('軌跡地図生成エラー: ' + err.toString());
+    return null;
+  }
+}
+
+// WebアプリAPIにGPX付き活動記録を登録（gpxContentは呼び出し元で取得済みのものを渡す）
+function postActivityToWebApp(e, answers, gpxContent) {
   // GPXファイルがない場合はAPIに送信しない
   if (!gpxContent) {
     Logger.log('GPXファイルなし - WebAPIへの送信をスキップ');
@@ -338,9 +496,9 @@ function postActivityToWebApp(e, answers) {
 // 戻り値: { detail: "伊藤議員 市政報告ビラ：50枚  参政党ビラ：20枚", total: 70 }
 function buildPostingDetail(a) {
   const BILLS = [
-    { key: "伊藤議員 市政報告ビラのポスティング枚数", label: "伊藤議員 市政報告ビラ" },
-    { key: "神田議員 市政報告ビラのポスティング枚数", label: "神田議員 市政報告ビラ" },
-    { key: "藤本議員 町政報告ビラのポスティング枚数", label: "藤本議員 町政報告ビラ" },
+    { key: "伊藤議員 市政報告ビラのポスティング枚数", label: "伊藤議員 市政報告" },
+    { key: "神田議員 市政報告ビラのポスティング枚数", label: "神田議員 市政報告" },
+    { key: "藤本議員 後援会通信のポスティング枚数", label: "藤本議員 後援会通信" },
     { key: "参政党ビラのポスティング枚数",            label: "参政党ビラ"             },
   ];
 

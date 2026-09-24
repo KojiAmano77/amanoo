@@ -5,6 +5,15 @@ const roomId4 = "446130978"; // 藤本さん応援チャット
 const roomId5 = "441626371"; // 愛知東活動報告チャット
 const CHATWORK_API_BASE = "https://api.chatwork.com/v2/rooms";
 const CHATWORK_TOKEN = "16da790394232028d85de8c15cf49d0d"; // 自動投稿APIトークン
+const GEOAPIFY_API_KEY = "1b275026d271452081d69b9598d8bad5"; // 軌跡地図画像生成用（Geoapify Static Maps API）
+
+// 画像リサイズ用（Cloudinary、unsigned upload preset方式）
+// Chatworkが大きすぎる画像のサムネイル生成に失敗する問題への対策。
+// APIシークレットは不要（unsigned presetのため。安全のためコードには含めない）
+const CLOUDINARY_CLOUD_NAME = "e3edgpjb";
+const CLOUDINARY_UPLOAD_PRESET = "chatwork_resize";
+const IMAGE_RESIZE_THRESHOLD_BYTES = 1080 * 1920; // これを超えるサイズの画像のみリサイズ対象（1MB）
+const IMAGE_MAX_DIMENSION = 1920; // リサイズ後の最大辺（px）。縦横比は維持、これより小さい画像は拡大しない
 // 投稿先チャットルームIDの配列（複数指定すると全部に連続投稿される。1件なら従来通り1回のみ）
 const CHATROOM_IDS = [roomId2];
 
@@ -34,6 +43,11 @@ function onFormSubmit(e) {
   const answers = extractAnswers(e);
   const imageBlobs = getImageBlobsFromForm(e);
   const message = buildMessage(answers);
+  const gpxContent = getGpxContentFromForm(e, answers);
+
+  // GPXがあれば軌跡地図画像を自動生成し、手動添付画像と合わせて投稿する
+  const trackImage = gpxContent ? generateTrackMapImage(gpxContent) : null;
+  const allImages = trackImage ? imageBlobs.concat([trackImage]) : imageBlobs;
 
   // 基本の投稿先に、「追加投稿チャット」で選択されたルームを合成
   const targetRoomIds = [...CHATROOM_IDS];
@@ -42,9 +56,9 @@ function onFormSubmit(e) {
   }
 
   // 配列内のチャットルームすべてに連続投稿（要素数1なら従来通り1回のみ）
-  targetRoomIds.forEach(roomId => postToChatwork(roomId, message, imageBlobs));
+  targetRoomIds.forEach(roomId => postToChatwork(roomId, message, allImages));
   registerWebAppUser(answers);      // Webアプリのアカウント自動発行（未登録の場合のみ）
-  postActivityToWebApp(e, answers);
+  postActivityToWebApp(e, answers, gpxContent);
 }
 
 // 投稿者名（スペース除去）をアカウント名としてWebアプリにユーザー登録
@@ -247,6 +261,48 @@ function postToChatwork(roomId, message, imageBlobs) {
   }
 }
 
+// Chatworkが大きすぎる画像のサムネイル生成に失敗する問題への対策。
+// 一定サイズを超える画像のみCloudinary経由でリサイズする（失敗時は元画像のまま返す）
+// unsigned upload preset方式のため、APIキー・シークレットは不要
+function resizeImageIfLarge(blob) {
+  try {
+    if (blob.getBytes().length <= IMAGE_RESIZE_THRESHOLD_BYTES) return blob; // 十分小さいのでそのまま
+
+    const uploadUrl = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`;
+    const uploadRes = UrlFetchApp.fetch(uploadUrl, {
+      method: 'post',
+      payload: {
+        file: blob,
+        upload_preset: CLOUDINARY_UPLOAD_PRESET
+      },
+      muteHttpExceptions: true
+    });
+
+    if (uploadRes.getResponseCode() !== 200) {
+      Logger.log('Cloudinaryアップロードエラー: HTTP ' + uploadRes.getResponseCode() + ' ' + uploadRes.getContentText().substring(0, 300));
+      return blob;
+    }
+
+    const uploadJson = JSON.parse(uploadRes.getContentText());
+    const publicId = uploadJson.public_id;
+    const format = uploadJson.format || 'jpg';
+
+    // リサイズ済みバージョンのURLを組み立てて取得（指定サイズ内に収める。拡大はしない）
+    const resizedUrl = `https://res.cloudinary.com/${CLOUDINARY_CLOUD_NAME}/image/upload/w_${IMAGE_MAX_DIMENSION},h_${IMAGE_MAX_DIMENSION},c_limit,q_auto/${publicId}.${format}`;
+    const resizedRes = UrlFetchApp.fetch(resizedUrl, { muteHttpExceptions: true });
+    if (resizedRes.getResponseCode() !== 200) {
+      Logger.log('Cloudinaryリサイズ取得エラー: HTTP ' + resizedRes.getResponseCode());
+      return blob;
+    }
+
+    Logger.log('画像リサイズ成功: ' + blob.getBytes().length + ' → ' + resizedRes.getBlob().getBytes().length + ' bytes');
+    return resizedRes.getBlob().setName(blob.getName());
+  } catch (err) {
+    Logger.log('画像リサイズ処理エラー: ' + err.toString());
+    return blob;
+  }
+}
+
 // Googleフォームから画像ファイルを複数取得
 function getImageBlobsFromForm(e) {
   const responses = e.response.getItemResponses();
@@ -263,7 +319,7 @@ function getImageBlobsFromForm(e) {
       if (fileIds && fileIds.length > 0) {
         fileIds.forEach(id => {
           const blob = DriveApp.getFileById(id).getBlob().setContentType("image/jpeg");
-          blobs.push(blob);
+          blobs.push(resizeImageIfLarge(blob));
         });
       }
     }
@@ -307,10 +363,8 @@ function buildGpxFileName(answers) {
   return parts.filter(Boolean).join('_') + '.gpx';
 }
 
-// WebアプリAPIにGPX付き活動記録を登録
-function postActivityToWebApp(e, answers) {
-  // GPXファイル取得
-  let gpxContent = null;
+// フォーム回答からGPXファイルの中身を取得（ファイル名も意味のある名前にリネームする）
+function getGpxContentFromForm(e, answers) {
   const responses = e.response.getItemResponses();
 
   for (const r of responses) {
@@ -331,8 +385,9 @@ function postActivityToWebApp(e, answers) {
           file.setName(newName);
           Logger.log('GPXファイル名変更: ' + newName);
 
-          gpxContent = file.getBlob().getDataAsString('UTF-8');
+          const gpxContent = file.getBlob().getDataAsString('UTF-8');
           Logger.log('GPX取得成功: ' + gpxContent.substring(0, 80));
+          return gpxContent;
         }
       } catch (err) {
         Logger.log('GPX取得エラー: ' + err.toString());
@@ -340,7 +395,72 @@ function postActivityToWebApp(e, answers) {
       break;
     }
   }
+  return null;
+}
 
+// GPXの中身から軌跡（トラック）付きの静的地図画像を生成する（Geoapify Static Maps API使用）
+// 失敗時・座標が取れない場合は null を返す
+function generateTrackMapImage(gpxContent) {
+  try {
+    // <trkpt lat="..." lon="..."> を正規表現で抽出（XMLパースより軽量・namespace非依存）
+    // lat/lonの属性順序に依存しないよう、タグ内の属性文字列を取ってから個別に検索する
+    const points = [];
+    const trkptRegex = /<trkpt\b([^>]*)>/g;
+    let m;
+    while ((m = trkptRegex.exec(gpxContent)) !== null) {
+      const attrs = m[1];
+      const latMatch = attrs.match(/\blat="([-\d.]+)"/);
+      const lonMatch = attrs.match(/\blon="([-\d.]+)"/);
+      if (latMatch && lonMatch) {
+        points.push([lonMatch[1], latMatch[1]]); // [lon, lat] の順（Geoapify仕様）
+      }
+    }
+    if (points.length < 2) {
+      Logger.log('軌跡地図生成スキップ: 座標点が不足 (' + points.length + '点)');
+      return null;
+    }
+
+    // 座標が多いトラックでもリクエストボディが極端に大きくならないよう、念のため上限を設けて間引く
+    // （POST方式のためGET時のようなURL長制限[2048文字]は受けないが、安全のため上限は残す）
+    const MAX_POINTS = 1000;
+    const step = Math.max(1, Math.ceil(points.length / MAX_POINTS));
+    const sampled = points.filter((_, i) => i % step === 0);
+
+    // GAS標準のUrlFetchApp（GET）はURLが2048文字を超えると
+    // "Limit Exceeded: URLFetch URL Length" で失敗するため、
+    // 座標データをURLではなくPOSTのJSONボディで送る方式に変更
+    const payload = {
+      width: 600,
+      height: 400,
+      style: 'osm-carto',
+      geometries: [{
+        type: 'polyline',
+        linecolor: '#ff6600',
+        linewidth: 5,
+        value: sampled.map(p => ({ lon: parseFloat(p[0]), lat: parseFloat(p[1]) }))
+      }]
+    };
+
+    const url = 'https://maps.geoapify.com/v1/staticmap?apiKey=' + GEOAPIFY_API_KEY;
+    const response = UrlFetchApp.fetch(url, {
+      method: 'post',
+      contentType: 'application/json',
+      payload: JSON.stringify(payload),
+      muteHttpExceptions: true
+    });
+    if (response.getResponseCode() !== 200) {
+      Logger.log('軌跡地図生成エラー: HTTP ' + response.getResponseCode() + ' ' + response.getContentText().substring(0, 200));
+      return null;
+    }
+    return response.getBlob().setContentType('image/jpeg').setName('軌跡地図.jpg');
+  } catch (err) {
+    Logger.log('軌跡地図生成エラー: ' + err.toString());
+    return null;
+  }
+}
+
+// WebアプリAPIにGPX付き活動記録を登録（gpxContentは呼び出し元で取得済みのものを渡す）
+function postActivityToWebApp(e, answers, gpxContent) {
   // GPXファイルがない場合はAPIに送信しない
   if (!gpxContent) {
     Logger.log('GPXファイルなし - WebAPIへの送信をスキップ');
