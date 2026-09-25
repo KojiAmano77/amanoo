@@ -4,10 +4,40 @@ const roomId3 = "420318628"; // テスト用チャット
 const roomId4 = "446130978"; // 藤本さん応援チャット
 const roomId5 = "441626371"; // 愛知東活動報告チャット
 const CHATWORK_API_BASE = "https://api.chatwork.com/v2/rooms";
-const CHATWORK_TOKEN = "16da790394232028d85de8c15cf49d0d"; // 自動投稿APIトークン
-const GEOAPIFY_API_KEY = "1b275026d271452081d69b9598d8bad5"; // 軌跡地図画像生成用（Geoapify Static Maps API）
+// トークン・APIキーはコードに直接書かず、スクリプト プロパティから読み込む
+// （初回のみ setupScriptProperties() を実行して設定。詳細は同関数のコメント参照）
+const scriptProps = PropertiesService.getScriptProperties();
+const CHATWORK_TOKEN = scriptProps.getProperty('CHATWORK_TOKEN'); // 自動投稿APIトークン
+const GEOAPIFY_API_KEY = scriptProps.getProperty('GEOAPIFY_API_KEY'); // 軌跡地図画像生成用（Geoapify Static Maps API）
+
+// 画像リサイズ用（Cloudinary、unsigned upload preset方式）
+// Chatworkが大きすぎる画像のサムネイル生成に失敗する問題への対策。
+// APIシークレットは不要（unsigned presetのため。安全のためコードには含めない）
+const CLOUDINARY_CLOUD_NAME = "e3edgpjb";
+const CLOUDINARY_UPLOAD_PRESET = "chatwork_resize";
+const IMAGE_RESIZE_THRESHOLD_BYTES = 1080 * 1920; // これを超えるサイズの画像のみリサイズ対象（1MB）
+const IMAGE_MAX_DIMENSION = 1920; // リサイズ後の最大辺（px）。縦横比は維持、これより小さい画像は拡大しない
 // 投稿先チャットルームIDの配列（複数指定すると全部に連続投稿される。1件なら従来通り1回のみ）
 const CHATROOM_IDS = [roomId2];
+
+// ============================================================
+// ★★★ 初回セットアップ用 ★★★
+// トークン・APIキーをスクリプト プロパティに保存する（コードには残らない）。
+//
+// 手順:
+// 1. 下記の 'ここに現在の値を貼り付け' の部分を、実際のトークン・キーに書き換える
+// 2. GASエディタ上部の関数選択で setupScriptProperties を選び、▷実行 を1回だけ押す
+// 3. 実行できたら、貼り付けた値は削除してこの関数はそのまま（空でも）放置してOK
+//    ※一度実行すればプロジェクトの「スクリプト プロパティ」に保存され、
+//      このコード上に値を残しておく必要はない
+// ============================================================
+function setupScriptProperties() {
+  PropertiesService.getScriptProperties().setProperties({
+    'CHATWORK_TOKEN':   '現在の値',
+    'GEOAPIFY_API_KEY': '現在の値'
+  });
+  Logger.log('スクリプト プロパティを設定しました');
+}
 
 // ★ 日付を「2026/2/27(金)」形式に変換する関数（ゼロ埋めなし）
 function formatJapaneseDate(dateStr) {
@@ -253,6 +283,48 @@ function postToChatwork(roomId, message, imageBlobs) {
   }
 }
 
+// Chatworkが大きすぎる画像のサムネイル生成に失敗する問題への対策。
+// 一定サイズを超える画像のみCloudinary経由でリサイズする（失敗時は元画像のまま返す）
+// unsigned upload preset方式のため、APIキー・シークレットは不要
+function resizeImageIfLarge(blob) {
+  try {
+    if (blob.getBytes().length <= IMAGE_RESIZE_THRESHOLD_BYTES) return blob; // 十分小さいのでそのまま
+
+    const uploadUrl = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`;
+    const uploadRes = UrlFetchApp.fetch(uploadUrl, {
+      method: 'post',
+      payload: {
+        file: blob,
+        upload_preset: CLOUDINARY_UPLOAD_PRESET
+      },
+      muteHttpExceptions: true
+    });
+
+    if (uploadRes.getResponseCode() !== 200) {
+      Logger.log('Cloudinaryアップロードエラー: HTTP ' + uploadRes.getResponseCode() + ' ' + uploadRes.getContentText().substring(0, 300));
+      return blob;
+    }
+
+    const uploadJson = JSON.parse(uploadRes.getContentText());
+    const publicId = uploadJson.public_id;
+    const format = uploadJson.format || 'jpg';
+
+    // リサイズ済みバージョンのURLを組み立てて取得（指定サイズ内に収める。拡大はしない）
+    const resizedUrl = `https://res.cloudinary.com/${CLOUDINARY_CLOUD_NAME}/image/upload/w_${IMAGE_MAX_DIMENSION},h_${IMAGE_MAX_DIMENSION},c_limit,q_auto/${publicId}.${format}`;
+    const resizedRes = UrlFetchApp.fetch(resizedUrl, { muteHttpExceptions: true });
+    if (resizedRes.getResponseCode() !== 200) {
+      Logger.log('Cloudinaryリサイズ取得エラー: HTTP ' + resizedRes.getResponseCode());
+      return blob;
+    }
+
+    Logger.log('画像リサイズ成功: ' + blob.getBytes().length + ' → ' + resizedRes.getBlob().getBytes().length + ' bytes');
+    return resizedRes.getBlob().setName(blob.getName());
+  } catch (err) {
+    Logger.log('画像リサイズ処理エラー: ' + err.toString());
+    return blob;
+  }
+}
+
 // Googleフォームから画像ファイルを複数取得
 function getImageBlobsFromForm(e) {
   const responses = e.response.getItemResponses();
@@ -269,7 +341,7 @@ function getImageBlobsFromForm(e) {
       if (fileIds && fileIds.length > 0) {
         fileIds.forEach(id => {
           const blob = DriveApp.getFileById(id).getBlob().setContentType("image/jpeg");
-          blobs.push(blob);
+          blobs.push(resizeImageIfLarge(blob));
         });
       }
     }
@@ -402,7 +474,7 @@ function generateTrackMapImage(gpxContent) {
       Logger.log('軌跡地図生成エラー: HTTP ' + response.getResponseCode() + ' ' + response.getContentText().substring(0, 200));
       return null;
     }
-    return response.getBlob().setContentType('image/jpeg').setName('軌跡地図.jpg');
+    return response.getBlob().setContentType('image/jpeg').setName('routeMap.jpg');
   } catch (err) {
     Logger.log('軌跡地図生成エラー: ' + err.toString());
     return null;

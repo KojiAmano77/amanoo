@@ -386,67 +386,135 @@ function buildGpxFileName(answers) {
 }
 
 // フォーム回答からGPXファイルの中身を取得（ファイル名も意味のある名前にリネームする）
+// 複数ファイルが添付された場合は、記録開始時刻順に並べて1つのGPXに連結して返す
 function getGpxContentFromForm(e, answers) {
   const responses = e.response.getItemResponses();
 
   for (const r of responses) {
-    if (r.getItem().getTitle() === 'ルートヒストリーログ(gpxファイル)') {
+    if (r.getItem().getTitle() !== 'ルートヒストリーログ(gpxファイル)') continue;
+
+    const fileIds = r.getResponse();
+    const idList = (Array.isArray(fileIds) ? fileIds : [fileIds]).filter(Boolean);
+    const baseName = buildGpxFileName(answers).replace(/\.gpx$/, '');
+    const gpxList = [];
+
+    idList.forEach((rawId, i) => {
       try {
-        const fileIds = r.getResponse();
-        const idList = Array.isArray(fileIds) ? fileIds : [fileIds];
-        if (idList.length > 0 && idList[0]) {
-          let fileId = String(idList[0]);
-          const match = fileId.match(/[-\w]{25,}/);
-          if (match) fileId = match[0];
+        let fileId = String(rawId);
+        const match = fileId.match(/[-\w]{25,}/);
+        if (match) fileId = match[0];
 
-          Logger.log('GPX fileId: ' + fileId);
-          const file = DriveApp.getFileById(fileId);
+        Logger.log('GPX fileId: ' + fileId);
+        const file = DriveApp.getFileById(fileId);
 
-          // ファイル名を意味のある名前に変更してGoogle Driveに保存
-          const newName = buildGpxFileName(answers);
-          file.setName(newName);
-          Logger.log('GPXファイル名変更: ' + newName);
+        // ファイル名を意味のある名前に変更（複数ある場合は _1, _2 … の連番を付ける）
+        const newName = idList.length > 1 ? `${baseName}_${i + 1}.gpx` : `${baseName}.gpx`;
+        file.setName(newName);
+        Logger.log('GPXファイル名変更: ' + newName);
 
-          const gpxContent = file.getBlob().getDataAsString('UTF-8');
-          Logger.log('GPX取得成功: ' + gpxContent.substring(0, 80));
-          return gpxContent;
-        }
+        const content = file.getBlob().getDataAsString('UTF-8');
+        Logger.log('GPX取得成功: ' + content.substring(0, 80));
+        gpxList.push(content);
       } catch (err) {
+        // 1ファイル読めなくても、残りのファイルで処理を続ける
         Logger.log('GPX取得エラー: ' + err.toString());
       }
-      break;
-    }
+    });
+
+    if (gpxList.length === 0) return null;
+    if (gpxList.length === 1) return gpxList[0]; // 従来通り（1ファイルはそのまま）
+
+    const merged = mergeGpxContents(gpxList);
+    Logger.log('GPX連結: ' + gpxList.length + 'ファイル → ' + merged.length + '文字');
+    return merged;
   }
   return null;
+}
+
+// GPX内の最初の<time>を取得（並べ替え用）。取れなければ null
+function getGpxStartTime(gpxContent) {
+  const m = gpxContent.match(/<trkpt\b[\s\S]*?<time>([^<]+)<\/time>/);
+  const t = m ? Date.parse(m[1]) : NaN;
+  return isNaN(t) ? null : t;
+}
+
+// GPXから <trkseg>…</trkseg> ブロックを文字列のまま抜き出す
+// trksegが無いのにtrkptだけあるGPXは、trkptをまとめて1セグメントとして扱う
+function extractTrksegBlocks(gpxContent) {
+  const segs = gpxContent.match(/<trkseg\b[\s\S]*?<\/trkseg>/g);
+  if (segs && segs.length > 0) return segs;
+
+  const pts = gpxContent.match(/<trkpt\b[\s\S]*?(?:<\/trkpt>|\/>)/g);
+  return pts ? ['<trkseg>\n' + pts.join('\n') + '\n</trkseg>'] : [];
+}
+
+// 複数GPXを1つに連結する（記録開始時刻順。各ファイルのトラックは別セグメントとして保持）
+function mergeGpxContents(gpxList) {
+  // 時刻が取れないファイルは添付順のまま後ろへ
+  const sorted = gpxList
+    .map((content, i) => ({ content, i, start: getGpxStartTime(content) }))
+    .sort((a, b) => {
+      if (a.start === null && b.start === null) return a.i - b.i;
+      if (a.start === null) return 1;
+      if (b.start === null) return -1;
+      return a.start - b.start;
+    })
+    .map(x => x.content);
+
+  // ルート要素（名前空間宣言など）は先頭ファイルのものを流用
+  const gpxOpenMatch = sorted[0].match(/<gpx\b[^>]*>/);
+  const gpxOpen = gpxOpenMatch
+    ? gpxOpenMatch[0]
+    : '<gpx version="1.1" creator="GAS merge" xmlns="http://www.topografix.com/GPX/1/1">';
+
+  const segments = [];
+  sorted.forEach(c => segments.push(...extractTrksegBlocks(c)));
+
+  return '<?xml version="1.0" encoding="UTF-8"?>\n'
+    + gpxOpen + '\n<trk>\n'
+    + segments.join('\n')
+    + '\n</trk>\n</gpx>';
+}
+
+// <trkpt lat="..." lon="..."> を正規表現で抽出（XMLパースより軽量・namespace非依存）
+// lat/lonの属性順序に依存しないよう、タグ内の属性文字列を取ってから個別に検索する
+// 戻り値: [[lon, lat], ...]（Geoapify仕様の順）
+function extractTrackPoints(text) {
+  const points = [];
+  const trkptRegex = /<trkpt\b([^>]*)>/g;
+  let m;
+  while ((m = trkptRegex.exec(text)) !== null) {
+    const attrs = m[1];
+    const latMatch = attrs.match(/\blat="([-\d.]+)"/);
+    const lonMatch = attrs.match(/\blon="([-\d.]+)"/);
+    if (latMatch && lonMatch) points.push([lonMatch[1], latMatch[1]]);
+  }
+  return points;
 }
 
 // GPXの中身から軌跡（トラック）付きの静的地図画像を生成する（Geoapify Static Maps API使用）
 // 失敗時・座標が取れない場合は null を返す
 function generateTrackMapImage(gpxContent) {
   try {
-    // <trkpt lat="..." lon="..."> を正規表現で抽出（XMLパースより軽量・namespace非依存）
-    // lat/lonの属性順序に依存しないよう、タグ内の属性文字列を取ってから個別に検索する
-    const points = [];
-    const trkptRegex = /<trkpt\b([^>]*)>/g;
-    let m;
-    while ((m = trkptRegex.exec(gpxContent)) !== null) {
-      const attrs = m[1];
-      const latMatch = attrs.match(/\blat="([-\d.]+)"/);
-      const lonMatch = attrs.match(/\blon="([-\d.]+)"/);
-      if (latMatch && lonMatch) {
-        points.push([lonMatch[1], latMatch[1]]); // [lon, lat] の順（Geoapify仕様）
-      }
-    }
-    if (points.length < 2) {
-      Logger.log('軌跡地図生成スキップ: 座標点が不足 (' + points.length + '点)');
+    // セグメント（連結GPXでは元ファイル単位）ごとに座標を抽出し、別々の線として描く
+    // → 別の日時・場所のルート同士が直線でつながらないようにする
+    const segments = extractTrksegBlocks(gpxContent)
+      .map(extractTrackPoints)
+      .filter(pts => pts.length >= 2);
+    const totalPoints = segments.reduce((s, pts) => s + pts.length, 0);
+    if (segments.length === 0) {
+      Logger.log('軌跡地図生成スキップ: 座標点が不足 (' + totalPoints + '点)');
       return null;
     }
 
     // 座標が多いトラックでもリクエストボディが極端に大きくならないよう、念のため上限を設けて間引く
     // （POST方式のためGET時のようなURL長制限[2048文字]は受けないが、安全のため上限は残す）
+    // 複数セグメントの場合も合計点数で間引き率を決める。各セグメントの終点は必ず残す
     const MAX_POINTS = 1000;
-    const step = Math.max(1, Math.ceil(points.length / MAX_POINTS));
-    const sampled = points.filter((_, i) => i % step === 0);
+    const step = Math.max(1, Math.ceil(totalPoints / MAX_POINTS));
+    const sampledSegments = segments.map(pts =>
+      pts.filter((_, i) => i % step === 0 || i === pts.length - 1)
+    );
 
     // GAS標準のUrlFetchApp（GET）はURLが2048文字を超えると
     // "Limit Exceeded: URLFetch URL Length" で失敗するため、
@@ -455,12 +523,12 @@ function generateTrackMapImage(gpxContent) {
       width: 600,
       height: 400,
       style: 'osm-carto',
-      geometries: [{
+      geometries: sampledSegments.map(pts => ({
         type: 'polyline',
         linecolor: '#ff6600',
         linewidth: 5,
-        value: sampled.map(p => ({ lon: parseFloat(p[0]), lat: parseFloat(p[1]) }))
-      }]
+        value: pts.map(p => ({ lon: parseFloat(p[0]), lat: parseFloat(p[1]) }))
+      }))
     };
 
     const url = 'https://maps.geoapify.com/v1/staticmap?apiKey=' + GEOAPIFY_API_KEY;
