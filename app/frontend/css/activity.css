@@ -885,14 +885,19 @@ button:active {
     left: 0 !important;
     right: 0 !important;
     width: 100vw !important;
-    height: auto !important;
+    /* スマホ用の min/max-height（500〜700px）が効いたままだと画面下に余白ができるため解除 */
+    height: 100vh !important;
+    height: 100dvh !important; /* アドレスバーの伸縮に追従（対応ブラウザのみ） */
+    min-height: 0 !important;
+    max-height: none !important;
     margin: 0 !important;
     padding: 0 !important;
     border-radius: 0 !important;
     z-index: 10000 !important;
 }
 
-.map-fullscreen-btn {
+.map-fullscreen-btn,
+.map-locate-btn {
     font-size: 18px;
     width: 34px;
     height: 34px;
@@ -905,7 +910,8 @@ button:active {
     justify-content: center;
     line-height: 1;
 }
-.map-fullscreen-btn:hover {
+.map-fullscreen-btn:hover,
+.map-locate-btn:hover {
     background: #F57C00 !important;
 }
 

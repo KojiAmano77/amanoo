@@ -85,7 +85,8 @@ def _get_or_create_api_user(db: Session, requested_username: Optional[str]) -> U
     user = User(
         username=username,
         email=None,
-        password_hash=get_password_hash(str(uuid.uuid4()))
+        password_hash=get_password_hash(str(uuid.uuid4())),
+        is_readonly=True,
     )
     db.add(user)
     db.commit()
@@ -358,6 +359,7 @@ async def register_user_from_form(
         username=username,
         email=email,
         password_hash=get_password_hash(password),
+        is_readonly=True,
     )
     db.add(user)
     db.commit()

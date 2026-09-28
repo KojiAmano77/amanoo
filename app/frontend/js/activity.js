@@ -174,9 +174,29 @@ function toggleMapFullscreen() {
 function initMaps() {
     // メイン地図（初期位置は東岡崎駅周辺、その後現在地に移動）
     map = L.map('map').setView([34.9576, 137.1656], 15);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© OpenStreetMap contributors'
-    }).addTo(map);
+    // 背景地図（OSM／地理院地図／航空写真）を切り替え可能にする
+    const gsiAttribution = '<a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank">国土地理院</a>';
+    const baseLayers = {
+        '通常の地図': L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors',
+            maxZoom: 19
+        }),
+        '地理院地図': L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png', {
+            attribution: gsiAttribution,
+            maxZoom: 18
+        }),
+        '航空写真': L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg', {
+            attribution: gsiAttribution,
+            maxZoom: 18
+        })
+    };
+    let savedBaseLayer = null;
+    try { savedBaseLayer = localStorage.getItem('activityMapBaseLayer'); } catch (e) { /* ignore */ }
+    (baseLayers[savedBaseLayer] || baseLayers['通常の地図']).addTo(map);
+    L.control.layers(baseLayers, null, { position: 'topleft' }).addTo(map);
+    map.on('baselayerchange', (e) => {
+        try { localStorage.setItem('activityMapBaseLayer', e.name); } catch (err) { /* ignore */ }
+    });
     
     // 地図初期化後に現在地を取得して地図を移動
     setMapToCurrentLocation();
@@ -324,6 +344,20 @@ function initMaps() {
         }
     });
     map.addControl(new FullscreenControl());
+
+    // 現在地ボタン（地図右下、全画面ボタンの上）
+    const LocateControl = L.Control.extend({
+        options: { position: 'bottomright' },
+        onAdd: function() {
+            const btn = L.DomUtil.create('button', 'leaflet-bar leaflet-control map-locate-btn');
+            btn.innerHTML = '📍';
+            btn.title = '現在地へ';
+            L.DomEvent.disableClickPropagation(btn);
+            L.DomEvent.on(btn, 'click', moveToCurrentLocation);
+            return btn;
+        }
+    });
+    map.addControl(new LocateControl());
 }
 
 // 地図を現在地に設定（初期化時用）
@@ -2120,12 +2154,6 @@ function computeDistrictCoverage(geojson, activities) {
     return { countMap, nameKey };
 }
 
-function districtFillColor(count) {
-    if (count === 0) return '#e0e0e0'; // グレー：未カバー
-    if (count <= 2)  return '#fff176'; // 黄：低カバー
-    return '#81c784';                  // 緑：カバー済み
-}
-
 function updateDistrictLabels() {
     const show = map.getZoom() >= DISTRICT_LABEL_MIN_ZOOM;
     document.querySelectorAll('.district-label').forEach(el => {
@@ -2172,12 +2200,11 @@ function renderSchoolDistricts() {
             if (councilHighlight !== null) {
                 // 議員ハイライトモード：議員がいる→赤、いない→無色
                 return councilHighlight[name]
-                    ? { color: '#b71c1c', weight: 2.5, fillColor: '#ef5350', fillOpacity: 0.18 }
+                    ? { color: '#b71c1c', weight: 2.5, fillColor: '#ef5350', fillOpacity: 0.12 }
                     : { color: '#555',    weight: 1.5, fillColor: '#fff',     fillOpacity: 0 };
             }
-            // 通常モード（GPXカバー率）
-            const fillColor = districtFillColor(countMap[name] || 0);
-            return { color: '#555', weight: 1.5, fillColor, fillOpacity: 0.4 };
+            // 通常モード：境界線のみ（ポスティング状況による塗り分けはしない）
+            return { color: '#555', weight: 1.5, fillColor: '#fff', fillOpacity: 0 };
         },
         onEachFeature: (feature, layer) => {
             const name = feature.properties[nameKey] || '不明';
