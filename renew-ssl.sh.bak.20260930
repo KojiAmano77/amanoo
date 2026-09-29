@@ -28,7 +28,7 @@ log "main_nginx 停止完了"
 # （www.amanooo.top は DNS 障害のためスキップ）
 log "certbot renew 実行中..."
 RENEW_OUTPUT=$(docker run --rm \
-    -v /home/koji/letsencrypt:/etc/letsencrypt \
+    -v /tmp/letsencrypt:/etc/letsencrypt \
     -p 80:80 \
     certbot/certbot:latest renew \
     --cert-name sanseitoaichi12.f5.si \

@@ -3539,3 +3539,88 @@ nginx: [warn] the "listen ... http2" directive is deprecated, use the "http2" di
 [2026-09-28 15:00:22] 結果: 更新不要（期限まで余裕あり）
 [2026-09-28 15:00:22] === 完了 ===
 
+[2026-09-29 03:00:01] === SSL証明書更新チェック開始 ===
+[2026-09-29 03:00:01] main_nginx 停止中...
+main_nginx
+[2026-09-29 03:00:08] main_nginx 停止完了
+[2026-09-29 03:00:08] certbot renew 実行中...
+Saving debug log to /var/log/letsencrypt/letsencrypt.log
+
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+Processing /etc/letsencrypt/renewal/sanseitoaichi12.f5.si.conf
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+Certificate not yet due for renewal
+
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+The following certificates are not due for renewal yet:
+  /etc/letsencrypt/live/sanseitoaichi12.f5.si/fullchain.pem expires on 2026-11-10 (skipped)
+No renewals were attempted.
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+[2026-09-29 03:00:14] certbot renew 完了
+[2026-09-29 03:00:14] main_nginx 起動中...
+main_nginx
+Error response from daemon: endpoint with name main_nginx already exists in network receipt_input_receipt_network
+Error response from daemon: endpoint with name main_nginx already exists in network fastapi_nginx_project_activity_network
+[2026-09-29 03:00:16] main_nginx 起動完了
+[2026-09-29 03:00:21] nginx 設定リロード中...
+2026/09/28 18:00:21 [warn] 23#23: the "listen ... http2" directive is deprecated, use the "http2" directive instead in /etc/nginx/nginx.conf:23
+nginx: [warn] the "listen ... http2" directive is deprecated, use the "http2" directive instead in /etc/nginx/nginx.conf:23
+2026/09/28 18:00:21 [warn] 23#23: the "listen ... http2" directive is deprecated, use the "http2" directive instead in /etc/nginx/nginx.conf:50
+nginx: [warn] the "listen ... http2" directive is deprecated, use the "http2" directive instead in /etc/nginx/nginx.conf:50
+2026/09/28 18:00:21 [notice] 23#23: signal process started
+[2026-09-29 03:00:21] nginx リロード完了
+[2026-09-29 03:00:21] 結果: 更新不要（期限まで余裕あり）
+[2026-09-29 03:00:21] === 完了 ===
+
+[2026-09-29 15:00:01] === SSL証明書更新チェック開始 ===
+[2026-09-29 15:00:01] main_nginx 停止中...
+main_nginx
+[2026-09-29 15:00:03] main_nginx 停止完了
+[2026-09-29 15:00:03] certbot renew 実行中...
+Saving debug log to /var/log/letsencrypt/letsencrypt.log
+
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+Processing /etc/letsencrypt/renewal/sanseitoaichi12.f5.si.conf
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+Certificate not yet due for renewal
+
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+The following certificates are not due for renewal yet:
+  /etc/letsencrypt/live/sanseitoaichi12.f5.si/fullchain.pem expires on 2026-11-10 (skipped)
+No renewals were attempted.
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+[2026-09-29 15:00:12] certbot renew 完了
+[2026-09-29 15:00:12] main_nginx 起動中...
+main_nginx
+Error response from daemon: endpoint with name main_nginx already exists in network receipt_input_receipt_network
+Error response from daemon: endpoint with name main_nginx already exists in network fastapi_nginx_project_activity_network
+[2026-09-29 15:00:13] main_nginx 起動完了
+[2026-09-29 15:00:18] nginx 設定リロード中...
+2026/09/29 06:00:18 [warn] 24#24: the "listen ... http2" directive is deprecated, use the "http2" directive instead in /etc/nginx/nginx.conf:23
+nginx: [warn] the "listen ... http2" directive is deprecated, use the "http2" directive instead in /etc/nginx/nginx.conf:23
+2026/09/29 06:00:18 [warn] 24#24: the "listen ... http2" directive is deprecated, use the "http2" directive instead in /etc/nginx/nginx.conf:50
+nginx: [warn] the "listen ... http2" directive is deprecated, use the "http2" directive instead in /etc/nginx/nginx.conf:50
+2026/09/29 06:00:18 [notice] 24#24: signal process started
+[2026-09-29 15:00:18] nginx リロード完了
+[2026-09-29 15:00:18] 結果: 更新不要（期限まで余裕あり）
+[2026-09-29 15:00:18] === 完了 ===
+
+[2026-09-30 03:00:01] === SSL証明書更新チェック開始 ===
+[2026-09-30 03:00:01] main_nginx 停止中...
+main_nginx
+[2026-09-30 03:00:01] main_nginx 停止完了
+[2026-09-30 03:00:01] certbot renew 実行中...
+Saving debug log to /var/log/letsencrypt/letsencrypt.log
+No certificate found with name sanseitoaichi12.f5.si (expected /etc/letsencrypt/renewal/sanseitoaichi12.f5.si.conf).
+Ask for help or search for solutions at https://community.letsencrypt.org. See the logfile /var/log/letsencrypt/letsencrypt.log or re-run Certbot with -v for more details.
+[2026-09-30 03:00:05] WARNING: certbot renew がエラーを返しました (exit=1)
+[2026-09-30 03:00:05] main_nginx 起動中...
+main_nginx
+Error response from daemon: endpoint with name main_nginx already exists in network receipt_input_receipt_network
+Error response from daemon: endpoint with name main_nginx already exists in network fastapi_nginx_project_activity_network
+[2026-09-30 03:00:06] main_nginx 起動完了
+[2026-09-30 03:00:11] nginx 設定リロード中...
+[2026-09-30 03:00:16] WARNING: nginx リロード失敗（リトライ中）
+[2026-09-30 03:00:22] 結果: certbot 出力を確認してください
+[2026-09-30 03:00:22] === 完了 ===
+
