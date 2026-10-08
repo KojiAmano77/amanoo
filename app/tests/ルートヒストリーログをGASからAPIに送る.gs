@@ -15,8 +15,10 @@ const GEOAPIFY_API_KEY = scriptProps.getProperty('GEOAPIFY_API_KEY'); // 軌跡�
 // APIシークレットは不要（unsigned presetのため。安全のためコードには含めない）
 const CLOUDINARY_CLOUD_NAME = "e3edgpjb";
 const CLOUDINARY_UPLOAD_PRESET = "chatwork_resize";
-const IMAGE_RESIZE_THRESHOLD_BYTES = 1080 * 1920; // これを超えるサイズの画像のみリサイズ対象（1MB）
+const IMAGE_RESIZE_THRESHOLD_BYTES = 1000 * 1600; // これを超えるサイズの画像のみリサイズ対象（1MB）
 const IMAGE_MAX_DIMENSION = 1920; // リサイズ後の最大辺（px）。縦横比は維持、これより小さい画像は拡大しない
+const CHATWORK_UPLOAD_INTERVAL_MS = 1000; // 画像を連続投稿する際の間隔
+const CHATWORK_RETRY_WAIT_MS = 11000; // 投稿制限(429)に当たった際の再試行までの待ち時間
 // フォーム「投稿先チャット」の選択肢 → ChatworkルームID の対応表
 // 選択肢を増やす場合は、フォームの選択肢の文言とまったく同じ文字列でここに追加する
 const CHATROOM_OPTIONS = {
@@ -142,7 +144,7 @@ function buildMessage(a) {
   const numOfPeople = a["参加人数合計"];
   const participantLine = participant ? `参加者：${participant}（計${numOfPeople}人）\n` : "";
 
-  const header = `⭐⭐${activity} 活動報告⭐⭐
+  const header = `🍊${activity} 活動報告🍊
 投稿者：${poster}
 ${participantLine}活動日：${date}
 活動時間：${start}～${end}`;
@@ -264,27 +266,52 @@ function postToChatwork(roomId, message, imageBlobs) {
     return;
   }
 
-  // 1枚目：本文＋画像
-  UrlFetchApp.fetch(`${CHATWORK_API_BASE}/${roomId}/files`, {
-    method: "post",
-    headers: headers,
-    payload: {
-      message: message,
-      file: imageBlobs[0]
-    }
+  // 1枚目：本文＋画像、2枚目以降：画像だけ
+  // 1枚失敗しても残りの画像は投稿を続ける。本文は最初に成功した画像に付ける
+  let pendingMessage = message;
+  imageBlobs.forEach((blob, i) => {
+    // Chatworkの投稿制限（1ルームあたり10秒間に10回まで）対策。
+    // 写真10枚＋軌跡地図で11回になり得るため、1秒ずつ間隔を空ける
+    if (i > 0) Utilities.sleep(CHATWORK_UPLOAD_INTERVAL_MS);
+    if (uploadFileToChatwork(roomId, pendingMessage, blob)) pendingMessage = "";
   });
 
-  // 2枚目以降：画像だけ
-  for (let i = 1; i < imageBlobs.length; i++) {
-    UrlFetchApp.fetch(`${CHATWORK_API_BASE}/${roomId}/files`, {
+  // 画像がすべて失敗した場合でも、本文だけは投稿する
+  if (pendingMessage) {
+    UrlFetchApp.fetch(`${CHATWORK_API_BASE}/${roomId}/messages`, {
       method: "post",
       headers: headers,
-      payload: {
-        message: "",
-        file: imageBlobs[i]
-      }
+      payload: { body: pendingMessage }
     });
   }
+}
+
+// Chatworkに画像を1枚アップロードする（成功: true / 失敗: false）
+// 429（投稿制限超過）の場合は待ってから再試行する
+function uploadFileToChatwork(roomId, message, blob) {
+  const MAX_ATTEMPTS = 3;
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    try {
+      const res = UrlFetchApp.fetch(`${CHATWORK_API_BASE}/${roomId}/files`, {
+        method: "post",
+        headers: { "X-ChatWorkToken": CHATWORK_TOKEN },
+        payload: {
+          message: message,
+          file: blob
+        },
+        muteHttpExceptions: true
+      });
+      const code = res.getResponseCode();
+      if (code === 200) return true;
+
+      Logger.log(`Chatwork画像投稿エラー(${blob.getName()}, ${attempt}回目): HTTP ${code} ${res.getContentText().substring(0, 200)}`);
+      if (code !== 429) return false; // 制限超過以外は再試行しても直らない
+    } catch (err) {
+      Logger.log(`Chatwork画像投稿エラー(${blob.getName()}, ${attempt}回目): ${err.toString()}`);
+    }
+    if (attempt < MAX_ATTEMPTS) Utilities.sleep(CHATWORK_RETRY_WAIT_MS);
+  }
+  return false;
 }
 
 // Chatworkが大きすぎる画像のサムネイル生成に失敗する問題への対策。
@@ -338,8 +365,9 @@ function getImageBlobsFromForm(e) {
     if ([
       "ポスティングエリア（画像添付任意）",
       "活動エリア（画像添付）",
-      "貼付け後の写真"
-    ].includes(r.getItem().getTitle())) {
+      "貼付け後の写真",
+      "活動時の写真" // 辻立ち・駅立ちセクション（最大10枚）
+    ].includes(r.getItem().getTitle().trim())) {
 
       const fileIds = r.getResponse();
       if (fileIds && fileIds.length > 0) {

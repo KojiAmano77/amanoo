@@ -15,10 +15,14 @@ const GEOAPIFY_API_KEY = scriptProps.getProperty('GEOAPIFY_API_KEY'); // 軌跡�
 // APIシークレットは不要（unsigned presetのため。安全のためコードには含めない）
 const CLOUDINARY_CLOUD_NAME = "e3edgpjb";
 const CLOUDINARY_UPLOAD_PRESET = "chatwork_resize";
-const IMAGE_RESIZE_THRESHOLD_BYTES = 1080 * 1920; // これを超えるサイズの画像のみリサイズ対象（1MB）
+const IMAGE_RESIZE_THRESHOLD_BYTES = 1000 * 1600; // これを超えるサイズの画像のみリサイズ対象（1MB）
 const IMAGE_MAX_DIMENSION = 1920; // リサイズ後の最大辺（px）。縦横比は維持、これより小さい画像は拡大しない
-// 投稿先チャットルームIDの配列（複数指定すると全部に連続投稿される。1件なら従来通り1回のみ）
-const CHATROOM_IDS = [roomId2];
+// フォーム「投稿先チャット」の選択肢 → ChatworkルームID の対応表
+// 選択肢を増やす場合は、フォームの選択肢の文言とまったく同じ文字列でここに追加する
+const CHATROOM_OPTIONS = {
+  '参政党愛知第１２支部': roomId2,
+  '活動報告-藤本和美（岡崎幸田県議）チャット': roomId4,
+};
 　
 // ============================================================
 // ★★★ 初回セットアップ用 ★★★
@@ -33,8 +37,8 @@ const CHATROOM_IDS = [roomId2];
 // ============================================================
 function setupScriptProperties() {
   PropertiesService.getScriptProperties().setProperties({
-    'CHATWORK_TOKEN':   '現在の値を入力',
-    'GEOAPIFY_API_KEY': '現在の値を入力'
+    'CHATWORK_TOKEN':   'ここに現在の値を貼り付け',
+    'GEOAPIFY_API_KEY': 'ここに現在の値を貼り付け'
   });
   Logger.log('スクリプト プロパティを設定しました');
 }
@@ -71,13 +75,13 @@ function onFormSubmit(e) {
   const trackImage = gpxContent ? generateTrackMapImage(gpxContent) : null;
   const allImages = trackImage ? imageBlobs.concat([trackImage]) : imageBlobs;
 
-  // 基本の投稿先に、「追加投稿チャット」で選択されたルームを合成
-  const targetRoomIds = [...CHATROOM_IDS];
-  if (includesOption(answers['追加投稿チャット'], '活動報告-藤本和美（岡崎幸田県議）チャット')) {
-    targetRoomIds.push(roomId4);
+  // 「投稿先チャット」で選択されたルームすべてに連続投稿
+  const targetRoomIds = Object.keys(CHATROOM_OPTIONS)
+    .filter(option => includesOption(answers['投稿先チャット'], option))
+    .map(option => CHATROOM_OPTIONS[option]);
+  if (targetRoomIds.length === 0) {
+    Logger.log('投稿先チャット未選択（または対応表にない選択肢）のためChatwork投稿をスキップ: ' + answers['投稿先チャット']);
   }
-
-  // 配列内のチャットルームすべてに連続投稿（要素数1なら従来通り1回のみ）
   targetRoomIds.forEach(roomId => postToChatwork(roomId, message, allImages));
   registerWebAppUser(answers);      // Webアプリのアカウント自動発行（未登録の場合のみ）
   postActivityToWebApp(e, answers, gpxContent);
@@ -138,7 +142,7 @@ function buildMessage(a) {
   const numOfPeople = a["参加人数合計"];
   const participantLine = participant ? `参加者：${participant}（計${numOfPeople}人）\n` : "";
 
-  const header = `⭐⭐${activity} 活動報告⭐⭐
+  const header = `🍊${activity} 活動報告🍊
 投稿者：${poster}
 ${participantLine}活動日：${date}
 活動時間：${start}～${end}`;

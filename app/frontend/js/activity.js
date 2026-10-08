@@ -105,12 +105,21 @@ function normalizeGeoJSON(raw) {
     }
 
     // If it's a raw Geometry (LineString/Polygon), wrap into a Feature
-    if (parsed && parsed.type && (parsed.type === 'LineString' || parsed.type === 'Polygon')) {
+    if (parsed && parsed.type && (parsed.type === 'LineString' || parsed.type === 'MultiLineString' || parsed.type === 'Polygon')) {
         return { type: 'Feature', geometry: parsed, properties: {} };
     }
 
     // Otherwise, return parsed object (best-effort)
     return parsed;
+}
+
+// 線ジオメトリをセグメントの配列 [[[lon, lat], ...], ...] として返す（線でなければ null）
+// 複数GPXを連結した記録は MultiLineString で保存されており、セグメント間は線で結ばない
+function getLineSegments(geometry) {
+    if (!geometry) return null;
+    if (geometry.type === 'LineString') return [geometry.coordinates];
+    if (geometry.type === 'MultiLineString') return geometry.coordinates;
+    return null;
 }
 
 if (!currentToken) {
@@ -634,10 +643,8 @@ async function loadActivitiesOnMap() {
                             場所: ${activity.location}<br>
                             ${distanceLine}${activity.memo ? `メモ: ${activity.memo}` : ''}${deleteButton}
                         `;
-                        const geoType = geoJSON && geoJSON.geometry && geoJSON.geometry.type;
-
                         const routeColor = getActivityColor(activity.id);
-                        if (geoType === 'LineString') {
+                        if (getLineSegments(geoJSON && geoJSON.geometry)) {
                             const layer = L.geoJSON(normalizeGeoJSON(geoJSON), {
                                 style: { color: routeColor, weight: 5, opacity: 0.9 }
                             }).addTo(map).bindPopup(popupContent);
@@ -1528,11 +1535,13 @@ async function editActivity(id, activityType, location, date, memo, latitude, lo
             switchTab('map-view');
 
             setTimeout(() => {
-                const geoType = geoJSON && geoJSON.geometry && geoJSON.geometry.type;
+                const lineSegments = getLineSegments(geoJSON && geoJSON.geometry);
 
-                if (geoType === 'LineString') {
-                    // GPX軌跡として復元
-                    const latLngs = geoJSON.geometry.coordinates.map(([lon, lat]) => [lat, lon]);
+                if (lineSegments) {
+                    // GPX軌跡として復元（セグメントごとに別の線として描く）
+                    const latLngs = lineSegments.map(seg => seg.map(([lon, lat]) => [lat, lon]));
+                    const firstSeg = latLngs[0];
+                    const lastSeg = latLngs[latLngs.length - 1];
 
                     if (gpxTrackLayer) { map.removeLayer(gpxTrackLayer); }
                     gpxMarkers.forEach(m => map.removeLayer(m));
@@ -1540,12 +1549,12 @@ async function editActivity(id, activityType, location, date, memo, latitude, lo
 
                     gpxTrackLayer = L.polyline(latLngs, { color: getActivityColor(id), weight: 5, opacity: 0.9 }).addTo(map);
 
-                    const startMarker = L.circleMarker(latLngs[0], {
+                    const startMarker = L.circleMarker(firstSeg[0], {
                         radius: 8, fillColor: '#4CAF50', color: '#fff', weight: 2, fillOpacity: 1
                     }).addTo(map).bindPopup('スタート');
                     gpxMarkers.push(startMarker);
 
-                    const endMarker = L.circleMarker(latLngs[latLngs.length - 1], {
+                    const endMarker = L.circleMarker(lastSeg[lastSeg.length - 1], {
                         radius: 8, fillColor: '#f44336', color: '#fff', weight: 2, fillOpacity: 1
                     }).addTo(map).bindPopup('ゴール');
                     gpxMarkers.push(endMarker);
@@ -2133,9 +2142,10 @@ function computeDistrictCoverage(geojson, activities) {
         let geo;
         try { geo = JSON.parse(act.polygon_coordinates); } catch(e) { return; }
         const geom = geo.geometry || geo;
-        if (!geom || geom.type !== 'LineString') return;
+        const lineSegments = getLineSegments(geom);
+        if (!lineSegments) return;
 
-        const coords = geom.coordinates;
+        const coords = lineSegments.flat();
         // 最大50点サンプリングしてパフォーマンスを確保
         const step = Math.max(1, Math.floor(coords.length / 50));
         const hitDistricts = new Set();

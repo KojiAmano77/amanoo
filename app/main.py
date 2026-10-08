@@ -55,20 +55,55 @@ def _calculate_distance_km(coordinates: List[List[float]]) -> Optional[float]:
     return round(total, 2)
 
 
-def _extract_gpx_points(gpx_content: str) -> Optional[List[List[float]]]:
+def _extract_gpx_segments(gpx_content: str) -> Optional[List[List[List[float]]]]:
+    """GPXからセグメント(<trkseg>)単位で座標を取り出す。
+    複数GPXを連結した記録では元ファイルごとに別セグメントになっているため、
+    区切りを保つことでファイル間が直線で結ばれないようにする。"""
     try:
         root = ET.fromstring(gpx_content)
     except ET.ParseError:
         return None
 
-    points: List[List[float]] = []
-    for trkpt in root.findall(".//{*}trkpt"):
-        lat = trkpt.get("lat")
-        lon = trkpt.get("lon")
-        if lat and lon:
-            points.append([float(lon), float(lat)])
+    def _points(parent) -> List[List[float]]:
+        points: List[List[float]] = []
+        for trkpt in parent.findall(".//{*}trkpt"):
+            lat = trkpt.get("lat")
+            lon = trkpt.get("lon")
+            if lat and lon:
+                points.append([float(lon), float(lat)])
+        return points
 
-    return points if points else None
+    trksegs = root.findall(".//{*}trkseg")
+    # trksegが無いのにtrkptだけあるGPXは、全点を1セグメントとして扱う
+    candidates = [_points(seg) for seg in trksegs] if trksegs else [_points(root)]
+    segments = [pts for pts in candidates if len(pts) >= 2]
+    if segments:
+        return segments
+
+    # 線にできるセグメントが無い場合（1点だけのGPX等）は従来通り全点を1本として返す
+    points = _points(root)
+    return [points] if points else None
+
+
+def _build_track_geojson(segments: List[List[List[float]]]) -> dict:
+    """1セグメントは従来通りLineString、複数セグメントはMultiLineStringにする"""
+    if len(segments) == 1:
+        geometry = {"type": "LineString", "coordinates": segments[0]}
+    else:
+        geometry = {"type": "MultiLineString", "coordinates": segments}
+    return {"type": "Feature", "geometry": geometry, "properties": {}}
+
+
+def _geometry_distance_km(geometry: dict) -> Optional[float]:
+    """線ジオメトリの距離。MultiLineStringは各セグメントの合計（セグメント間は含めない）"""
+    geo_type = geometry.get("type")
+    if geo_type == "LineString":
+        return _calculate_distance_km(geometry["coordinates"])
+    if geo_type == "MultiLineString":
+        distances = [_calculate_distance_km(seg) for seg in geometry["coordinates"]]
+        distances = [d for d in distances if d is not None]
+        return round(sum(distances), 2) if distances else None
+    return None
 
 
 def _generate_numeric_password(length: int = 6) -> str:
@@ -415,16 +450,13 @@ async def create_activity_from_form_api(
     longitude = None
     distance_km = None
     if gpx_content:
-        points = _extract_gpx_points(gpx_content)
-        if points:
-            polygon_coordinates = json.dumps({
-                "type": "Feature",
-                "geometry": { "type": "LineString", "coordinates": points },
-                "properties": {}
-            })
-            latitude = points[0][1]
-            longitude = points[0][0]
-            distance_km = _calculate_distance_km(points)
+        segments = _extract_gpx_segments(gpx_content)
+        if segments:
+            track_geojson = _build_track_geojson(segments)
+            polygon_coordinates = json.dumps(track_geojson)
+            latitude = segments[0][0][1]
+            longitude = segments[0][0][0]
+            distance_km = _geometry_distance_km(track_geojson["geometry"])
 
     db_activity = Activity(
         user_id=user.id,
@@ -475,8 +507,7 @@ async def create_activity(
         try:
             geo = json.loads(polygon_coordinates)
             geom = geo.get("geometry", geo)
-            if geom.get("type") == "LineString":
-                distance_km = _calculate_distance_km(geom["coordinates"])
+            distance_km = _geometry_distance_km(geom)
         except Exception:
             pass
 
