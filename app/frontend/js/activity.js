@@ -362,7 +362,8 @@ function initMaps() {
             btn.innerHTML = '📍';
             btn.title = '現在地へ';
             L.DomEvent.disableClickPropagation(btn);
-            L.DomEvent.on(btn, 'click', moveToCurrentLocation);
+            // 歩きながら自分の位置を細かく確認する用途のため、最も詳細な縮尺まで拡大する
+            L.DomEvent.on(btn, 'click', () => moveToCurrentLocation(true));
             return btn;
         }
     });
@@ -396,8 +397,8 @@ function setMapToCurrentLocation() {
 }
 
 
-// 現在地に移動
-function moveToCurrentLocation() {
+// 現在地に移動（zoomToMax: true なら表示中の背景地図で最も詳細な縮尺まで拡大する）
+function moveToCurrentLocation(zoomToMax = false) {
     const button = document.getElementById('current-location-btn');
     
     if (!navigator.geolocation) {
@@ -415,7 +416,7 @@ function moveToCurrentLocation() {
             const lng = position.coords.longitude;
             
             // 地図を現在地に移動
-            map.setView([lat, lng], 16);
+            map.setView([lat, lng], zoomToMax ? map.getMaxZoom() : 16);
             
             // 現在地にマーカーを追加（一時的）
             const currentLocationMarker = L.marker([lat, lng], {

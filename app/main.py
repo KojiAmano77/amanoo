@@ -376,6 +376,26 @@ async def register_user_from_form(
 
     existing = db.query(User).filter(User.username == username).first()
     if existing:
+        # メールアドレス未登録の閲覧専用アカウント（フォームのメール欄が無かった期間に
+        # GPX投稿から自動作成されたもの等）は、パスワードを誰も知らずログインできないため、
+        # 入力されたメールアドレスを紐づけてパスワードを発行し直し、通知して救済する
+        if email and not existing.email and existing.is_readonly:
+            if db.query(User).filter(User.email == email).first():
+                return {"created": False, "message": "メールアドレスが他のアカウントで使用中のため紐づけませんでした"}
+
+            password = _generate_numeric_password()
+            existing.email = email
+            existing.password_hash = get_password_hash(password)
+            existing.updated_at = datetime.utcnow()
+            db.commit()
+
+            email_sent = False
+            try:
+                email_sent = await send_new_account_email(email, username, password)
+            except Exception as e:
+                print(f"アカウント救済通知メール送信エラー: {e}")
+            return {"created": False, "email_linked": True, "username": username, "email_sent": email_sent}
+
         return {"created": False, "message": "既存アカウントのため作成しませんでした"}
 
     # メールアドレスが無いとパスワード通知ができず中途半端なアカウントになるため作成しない
