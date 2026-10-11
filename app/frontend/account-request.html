@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex">
+    <title>アカウント申請の確認 - 愛知第12支部活動記録マップ</title>
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+    <link rel="stylesheet" href="/static/css/index.css?v=2">
+</head>
+<body>
+    <div class="container">
+        <h1>アカウント申請の確認</h1>
+
+        <div class="form-section">
+            {% if state == "invalid" %}
+                <h2>申請が見つかりません</h2>
+                <p class="form-note">リンクが正しくないか、申請が取り消されています。</p>
+            {% else %}
+                {% if state == "pending" %}
+                    <h2>次の方からアカウントの申請があります</h2>
+                {% elif state == "approved" %}
+                    <h2>✅ 承認済みです</h2>
+                    <p class="form-note">アカウントを発行し、申請者にログインIDとパスワードをメールでお送りしました。</p>
+                {% elif state == "rejected" %}
+                    <h2>却下済みです</h2>
+                    <p class="form-note">この申請は却下されました。アカウントは発行していません（申請者への通知はありません）。</p>
+                {% elif state == "error" %}
+                    <h2>⚠️ 処理できませんでした</h2>
+                    <div class="message error">{{ detail }}</div>
+                {% endif %}
+
+                {% if account_request %}
+                <dl class="request-detail">
+                    <dt>お名前（ログインIDになります）</dt>
+                    <dd>{{ account_request.username }}</dd>
+                    <dt>メールアドレス</dt>
+                    <dd>{{ account_request.email }}</dd>
+                </dl>
+                {% endif %}
+
+                {% if account_request and account_request.status == "pending" %}
+                    <p class="form-note">承認すると、閲覧専用のアカウントが発行され、申請者にログインIDとパスワードがメールで届きます。</p>
+                    <form method="post" action="/account-requests/{{ account_request.token }}/approve">
+                        <button type="submit">承認する</button>
+                    </form>
+                    <form method="post" action="/account-requests/{{ account_request.token }}/reject">
+                        <button type="submit" class="secondary-btn">却下する</button>
+                    </form>
+                {% endif %}
+            {% endif %}
+        </div>
+    </div>
+</body>
+</html>

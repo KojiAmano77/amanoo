@@ -1,4 +1,5 @@
 import aiosmtplib
+import html
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import os
@@ -12,6 +13,11 @@ SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
 SMTP_USERNAME = os.getenv("SMTP_USERNAME", "")
 SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
 FROM_EMAIL = os.getenv("FROM_EMAIL", SMTP_USERNAME)
+# アカウント申請の承認者（支部長）宛て。カンマ区切りで複数指定できる
+APPROVER_EMAILS = [a.strip() for a in os.getenv("APPROVER_EMAILS", "").split(",") if a.strip()]
+# Webアプリ管理者（アカウント発行通知のBCC用）
+ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "").strip() or FROM_EMAIL
+SITE_URL = "https://sanseitoaichi12.f5.si"
 
 async def send_password_reset_email(to_email: str, reset_token: str):
     """パスワードリセット用のメールを送信"""
@@ -73,9 +79,10 @@ async def send_password_reset_email(to_email: str, reset_token: str):
         print(f"メール送信エラー: {e}")
         return False
 
-async def send_new_account_email(to_email: str, username: str, password: str):
-    """Googleフォーム経由で新規発行したアカウントの初期パスワードを通知"""
-    login_url = "https://sanseitoaichi12.f5.si/"
+async def send_new_account_email(to_email: str, username: str, password: str, bcc=None):
+    """新規発行したアカウントの初期パスワードを通知（bcc: BCCで同報するアドレスのリスト）"""
+    login_url = f"{SITE_URL}/"
+    safe_username = html.escape(username)
     subject = "参政党愛知第12支部活動記録マップのアカウントが発行されました"
 
     html_content = f"""
@@ -96,7 +103,7 @@ async def send_new_account_email(to_email: str, username: str, password: str):
 
             <div style="background:#fff3e0; border:2px dashed #ffb74d; border-radius:12px; padding:16px 20px; margin:20px 0;">
               <p style="margin:0 0 8px; font-size:13px; color:#e65100;">👤 ログインID</p>
-              <p style="margin:0 0 16px; font-size:18px; font-weight:bold; color:#3a2e20;">{username}</p>
+              <p style="margin:0 0 16px; font-size:18px; font-weight:bold; color:#3a2e20;">{safe_username}</p>
               <p style="margin:0 0 8px; font-size:13px; color:#e65100;">🔑 パスワード</p>
               <p style="margin:0; font-size:18px; font-weight:bold; color:#3a2e20; letter-spacing:2px;">{password}</p>
             </div>
@@ -141,6 +148,96 @@ async def send_new_account_email(to_email: str, username: str, password: str):
     message.attach(MIMEText(text_content, "plain", "utf-8"))
     message.attach(MIMEText(html_content, "html", "utf-8"))
 
+    # BCCはヘッダーに書かず、配送先にだけ加える（宛先と重複するアドレスは除く）
+    recipients = [to_email] + [a for a in dict.fromkeys(bcc or []) if a and a != to_email]
+
+    try:
+        await aiosmtplib.send(
+            message,
+            recipients=recipients,
+            hostname=SMTP_SERVER,
+            port=SMTP_PORT,
+            start_tls=True,
+            username=SMTP_USERNAME,
+            password=SMTP_PASSWORD,
+        )
+        return True
+    except Exception as e:
+        print(f"メール送信エラー: {e}")
+        return False
+
+async def send_account_request_email(username: str, email: str, review_url: str):
+    """アカウント申請があったことを承認者（支部長）に通知する。宛先は APPROVER_EMAILS の全員"""
+    if not APPROVER_EMAILS:
+        print("アカウント申請通知メール送信エラー: APPROVER_EMAILS が未設定です")
+        return False
+
+    subject = f"【活動記録マップ】アカウント申請がありました（{username}）"
+    safe_username = html.escape(username)
+    safe_email = html.escape(email)
+
+    html_content = f"""
+    <html>
+      <body style="margin:0; padding:0; background-color:#fff8f0; font-family:'Hiragino Sans','Meiryo',sans-serif;">
+        <div style="max-width:480px; margin:24px auto; background:#ffffff; border-radius:16px; overflow:hidden; border:1px solid #ffe0c2;">
+          <div style="background:linear-gradient(135deg,#ff9800,#ffb74d); padding:24px; text-align:center;">
+            <h1 style="color:#ffffff; font-size:20px; margin:0;">アカウント申請のお知らせ</h1>
+          </div>
+          <div style="padding:24px;">
+            <p style="color:#5a4632; font-size:14px; line-height:1.7;">
+              参政党愛知第12支部活動記録マップに、次の方からアカウントの申請がありました。
+            </p>
+            <div style="background:#fff3e0; border:2px dashed #ffb74d; border-radius:12px; padding:16px 20px; margin:20px 0;">
+              <p style="margin:0 0 8px; font-size:13px; color:#e65100;">👤 お名前</p>
+              <p style="margin:0 0 16px; font-size:18px; font-weight:bold; color:#3a2e20;">{safe_username}</p>
+              <p style="margin:0 0 8px; font-size:13px; color:#e65100;">✉️ メールアドレス</p>
+              <p style="margin:0; font-size:16px; font-weight:bold; color:#3a2e20;">{safe_email}</p>
+            </div>
+            <p style="color:#5a4632; font-size:14px; line-height:1.7;">
+              下のボタンから確認ページを開き、「承認する」または「却下する」を押してください。<br>
+              承認すると、申請者にログインIDとパスワードがメールで届きます。
+            </p>
+            <div style="text-align:center; margin:24px 0;">
+              <a href="{review_url}" style="display:inline-block; background:#ff9800; color:#ffffff; text-decoration:none; font-weight:bold; padding:12px 32px; border-radius:24px; font-size:15px;">申請を確認する</a>
+            </div>
+            <p style="color:#8a7660; font-size:12px; line-height:1.6;">
+              ※ボタンを押しただけでは承認されません。確認ページでの操作が必要です。
+            </p>
+          </div>
+          <div style="background:#fff3e0; text-align:center; padding:14px; font-size:12px; color:#a1785a;">
+            参政党 愛知第12支部活動記録マップ 🍊
+          </div>
+        </div>
+      </body>
+    </html>
+    """
+
+    text_content = f"""
+    アカウント申請のお知らせ
+
+    参政党愛知第12支部活動記録マップに、次の方からアカウントの申請がありました。
+
+    お名前：{username}
+    メールアドレス：{email}
+
+    下記のURLから確認ページを開き、「承認する」または「却下する」を押してください。
+    承認すると、申請者にログインIDとパスワードがメールで届きます。
+
+    {review_url}
+
+    ※URLを開いただけでは承認されません。確認ページでの操作が必要です。
+
+    愛知第12支部活動記録マップ
+    """
+
+    message = MIMEMultipart("alternative")
+    message["Subject"] = subject
+    message["From"] = FROM_EMAIL
+    message["To"] = ", ".join(APPROVER_EMAILS)
+
+    message.attach(MIMEText(text_content, "plain", "utf-8"))
+    message.attach(MIMEText(html_content, "html", "utf-8"))
+
     try:
         await aiosmtplib.send(
             message,
@@ -152,7 +249,7 @@ async def send_new_account_email(to_email: str, username: str, password: str):
         )
         return True
     except Exception as e:
-        print(f"メール送信エラー: {e}")
+        print(f"アカウント申請通知メール送信エラー: {e}")
         return False
 
 async def send_password_changed_email(to_email: str):

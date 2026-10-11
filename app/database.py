@@ -97,6 +97,19 @@ class PasswordResetToken(Base):
     user = relationship("User")
 
 
+class AccountRequest(Base):
+    """ログイン画面からの新規アカウント申請（支部長の承認待ち）"""
+    __tablename__ = "account_requests"
+
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String(50), nullable=False)
+    email = Column(String(100), nullable=False)
+    token = Column(String(255), unique=True, index=True, nullable=False)  # 承認用リンクの合言葉
+    status = Column(String(20), default="pending", nullable=False)        # pending / approved / rejected
+    created_at = Column(DateTime, default=datetime.utcnow)
+    decided_at = Column(DateTime, nullable=True)
+
+
 def get_db():
     db = SessionLocal()
     try:

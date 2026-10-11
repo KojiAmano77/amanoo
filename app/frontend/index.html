@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>愛知第12支部活動記録マップ</title>
     <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
-    <link rel="stylesheet" href="/static/css/index.css">
+    <link rel="stylesheet" href="/static/css/index.css?v=2">
 </head>
 <body>
     <div class="container">
@@ -23,18 +23,17 @@
                     <p><a href="#" id="forgot-password-link">パスワードをお忘れですか？</a></p>
                 </div>
                 
-                <!-- 新規登録UI：セキュリティのため一時的に非表示（バックエンドのロジックは残存）
-                     再表示する場合は display:none を削除する -->
-                <div class="form-section" style="display:none;">
-                    <h2>新規登録</h2>
-                    <form id="register-form">
-                        <input type="text" id="register-username" placeholder="ユーザー名" required>
-                        <input type="email" id="register-email" placeholder="メールアドレス" required>
-                        <input type="password" id="register-password" placeholder="パスワード" required>
-                        <button type="submit">新規登録</button>
+                <!-- アカウント申請：支部長の承認後にログイン情報がメールで届く（即時発行はしない） -->
+                <div class="form-section" id="account-request-section">
+                    <h2>アカウント申請</h2>
+                    <p class="form-note">アカウントをお持ちでない方は、お名前とメールアドレスを入力して申請してください。支部長の承認後、ログインIDとパスワードをメールでお送りします。</p>
+                    <form id="account-request-form">
+                        <input type="text" id="request-username" placeholder="お名前（フルネーム）" maxlength="50" required>
+                        <input type="email" id="request-email" placeholder="メールアドレス" maxlength="100" required>
+                        <button type="submit">申請する</button>
                     </form>
                 </div>
-                
+
                 <div class="form-section" id="reset-form-section" style="display: none;">
                     <h2>パスワードリセット</h2>
                     <form id="reset-request-form">
@@ -49,6 +48,6 @@
         <div id="message-area"></div>
     </div>
 
-    <script src="/static/js/index.js"></script>
+    <script src="/static/js/index.js?v=2"></script>
 </body>
 </html>

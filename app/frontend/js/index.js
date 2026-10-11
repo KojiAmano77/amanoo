@@ -37,35 +37,34 @@ document.getElementById('login-form').addEventListener('submit', async (e) => {
     }
 });
 
-// 新規登録フォーム
-document.getElementById('register-form').addEventListener('submit', async (e) => {
+// アカウント申請フォーム（支部長の承認後にログイン情報がメールで届く）
+document.getElementById('account-request-form').addEventListener('submit', async (e) => {
     e.preventDefault();
-    
-    const username = document.getElementById('register-username').value;
-    const email = document.getElementById('register-email').value;
-    const password = document.getElementById('register-password').value;
-    
+
+    const submitButton = e.target.querySelector('button[type="submit"]');
     const formData = new FormData();
-    formData.append('username', username);
-    formData.append('email', email);
-    formData.append('password', password);
-    
+    formData.append('username', document.getElementById('request-username').value);
+    formData.append('email', document.getElementById('request-email').value);
+
+    submitButton.disabled = true;
     try {
-        const response = await fetch('/register', {
+        const response = await fetch('/request-account', {
             method: 'POST',
             body: formData
         });
-        
+
         const result = await response.json();
-        
+
         if (response.ok) {
-            showMessage('登録完了しました。ログインしてください。', 'success');
-            document.getElementById('register-form').reset();
+            showMessage(result.message, 'success');
+            document.getElementById('account-request-form').reset();
         } else {
-            showMessage(result.detail || '登録エラー', 'error');
+            showMessage(typeof result.detail === 'string' ? result.detail : '申請エラー', 'error');
         }
     } catch (error) {
         showMessage('ネットワークエラー', 'error');
+    } finally {
+        submitButton.disabled = false;
     }
 });
 
@@ -105,7 +104,7 @@ document.addEventListener('DOMContentLoaded', function() {
         forgotPasswordLink.addEventListener('click', (e) => {
             e.preventDefault();
             document.getElementById('login-form').parentElement.style.display = 'none';
-            document.getElementById('register-form').parentElement.style.display = 'none';
+            document.getElementById('account-request-section').style.display = 'none';
             document.getElementById('reset-form-section').style.display = 'block';
         });
     }
@@ -117,7 +116,7 @@ document.addEventListener('DOMContentLoaded', function() {
             e.preventDefault();
             document.getElementById('reset-form-section').style.display = 'none';
             document.getElementById('login-form').parentElement.style.display = 'block';
-            // 新規登録UIはセキュリティのため非表示のまま維持する（表示を戻さない）
+            document.getElementById('account-request-section').style.display = 'block';
         });
     }
 });
@@ -127,5 +126,5 @@ function showMessage(message, type) {
     messageArea.innerHTML = `<div class="message ${type}">${message}</div>`;
     setTimeout(() => {
         messageArea.innerHTML = '';
-    }, 5000);
+    }, 8000);
 }

@@ -15,9 +15,13 @@ import json
 import math
 import xml.etree.ElementTree as ET
 
-from database import get_db, create_tables, User, Activity, PasswordResetToken, Event
+from database import get_db, create_tables, User, Activity, PasswordResetToken, Event, AccountRequest
 from auth import get_password_hash, verify_password, create_access_token, get_current_user
-from email_service import send_password_reset_email, send_password_changed_email, send_new_account_email
+from email_validator import validate_email, EmailNotValidError
+from email_service import (
+    send_password_reset_email, send_password_changed_email, send_new_account_email,
+    send_account_request_email, APPROVER_EMAILS, ADMIN_EMAIL, SITE_URL,
+)
 
 def _parse_activity_date(date_value: Any) -> datetime:
     if isinstance(date_value, datetime):
@@ -218,29 +222,153 @@ async def favicon():
 
 templates = Jinja2Templates(directory="frontend")
 
-# ユーザー登録
-@app.post("/register")
-async def register(
+# 新規アカウント申請（支部長の承認制）
+# 申請 → 支部長にメール通知 → 確認ページで承認 → 申請者にID・パスワードをメール通知
+MAX_PENDING_ACCOUNT_REQUESTS = 30  # いたずらで承認者にメールが大量に届くのを防ぐ上限
+
+
+def _account_request_page(request: Request, state: str, account_request=None, detail: str = ""):
+    return templates.TemplateResponse("account-request.html", {
+        "request": request,
+        "state": state,
+        "account_request": account_request,
+        "detail": detail,
+    })
+
+
+@app.post("/request-account")
+async def request_account(
     username: str = Form(...),
     email: str = Form(...),
-    password: str = Form(...),
     db: Session = Depends(get_db)
 ):
-    # ユーザー存在チェック
+    # Googleフォームの投稿者名と同じ規則（スペース除去）にそろえ、同じアカウントに記録が紐づくようにする
+    username = username.replace(" ", "").replace("　", "").strip()
+    email = email.strip()
+
+    if not username or len(username) > 50:
+        raise HTTPException(status_code=400, detail="お名前を50文字以内で入力してください")
+    try:
+        validate_email(email, check_deliverability=False)
+    except EmailNotValidError:
+        raise HTTPException(status_code=400, detail="メールアドレスの形式が正しくありません")
+    if len(email) > 100:
+        raise HTTPException(status_code=400, detail="メールアドレスが長すぎます")
+
+    if not APPROVER_EMAILS:
+        print("アカウント申請エラー: APPROVER_EMAILS が未設定です")
+        raise HTTPException(status_code=503, detail="現在アカウント申請を受け付けられません")
+
     if db.query(User).filter(User.username == username).first():
-        raise HTTPException(status_code=400, detail="ユーザー名は既に登録されています")
-    
+        raise HTTPException(status_code=400, detail="このお名前のアカウントは既にあります。ログインできない場合は「パスワードをお忘れですか？」をお試しください")
     if db.query(User).filter(User.email == email).first():
-        raise HTTPException(status_code=400, detail="Emailは既に登録されています")
-    
-    # ユーザー作成
-    hashed_password = get_password_hash(password)
-    db_user = User(username=username, email=email, password_hash=hashed_password)
-    db.add(db_user)
+        raise HTTPException(status_code=400, detail="このメールアドレスは既に登録されています")
+
+    accepted_message = "申請を受け付けました。支部長の承認後、メールでログイン情報をお送りします。"
+
+    pending = db.query(AccountRequest).filter(AccountRequest.status == "pending").all()
+    if any(r.username == username or r.email == email for r in pending):
+        return {"message": accepted_message}  # 承認待ちが既にあるので重複して作らない
+    if len(pending) >= MAX_PENDING_ACCOUNT_REQUESTS:
+        raise HTTPException(status_code=503, detail="現在申請が混み合っています。時間をおいて再度お試しください")
+
+    account_request = AccountRequest(
+        username=username,
+        email=email,
+        token=secrets.token_urlsafe(32),
+        status="pending",
+    )
+    db.add(account_request)
     db.commit()
-    db.refresh(db_user)
-    
-    return {"message": "正常にユーザー登録されました"}
+    db.refresh(account_request)
+
+    review_url = f"{SITE_URL}/account-requests/{account_request.token}"
+    sent = await send_account_request_email(username, email, review_url)
+    if not sent:
+        # 承認者に届かない申請を残すと再申請もできなくなるため取り消す
+        db.delete(account_request)
+        db.commit()
+        raise HTTPException(status_code=500, detail="申請の送信に失敗しました。時間をおいて再度お試しください")
+
+    return {"message": accepted_message}
+
+
+def _find_account_request(db: Session, token: str):
+    return db.query(AccountRequest).filter(AccountRequest.token == token).first()
+
+
+# 承認者（支部長）用の確認ページ。開いただけでは承認されない（メールの自動リンク確認による誤承認を防ぐ）
+@app.get("/account-requests/{token}", response_class=HTMLResponse)
+async def account_request_page(request: Request, token: str, db: Session = Depends(get_db)):
+    account_request = _find_account_request(db, token)
+    if not account_request:
+        return _account_request_page(request, "invalid")
+    return _account_request_page(request, account_request.status, account_request)
+
+
+@app.post("/account-requests/{token}/approve", response_class=HTMLResponse)
+async def approve_account_request(request: Request, token: str, db: Session = Depends(get_db)):
+    account_request = _find_account_request(db, token)
+    if not account_request:
+        return _account_request_page(request, "invalid")
+    if account_request.status != "pending":
+        return _account_request_page(request, account_request.status, account_request)
+
+    # 申請後に同じ名前・メールアドレスのアカウントが作られていないか再確認
+    if db.query(User).filter(User.username == account_request.username).first():
+        return _account_request_page(request, "error", account_request,
+                                     "同じお名前のアカウントが既に存在するため、発行できません。")
+    if db.query(User).filter(User.email == account_request.email).first():
+        return _account_request_page(request, "error", account_request,
+                                     "このメールアドレスは既に別のアカウントで使われているため、発行できません。")
+
+    password = _generate_numeric_password()
+    user = User(
+        username=account_request.username,
+        email=account_request.email,
+        password_hash=get_password_hash(password),
+        is_readonly=True,
+    )
+    db.add(user)
+    account_request.status = "approved"
+    account_request.decided_at = datetime.utcnow()
+    try:
+        db.flush()
+    except Exception as e:
+        # 複数の承認者がほぼ同時に承認した場合など
+        print(f"アカウント発行エラー: {e}")
+        db.rollback()
+        return _account_request_page(request, "error", _find_account_request(db, token),
+                                     "アカウントを発行できませんでした。ページを開き直して状況をご確認ください。")
+
+    sent = False
+    try:
+        sent = await send_new_account_email(
+            account_request.email, account_request.username, password,
+            bcc=APPROVER_EMAILS + [ADMIN_EMAIL],
+        )
+    except Exception as e:
+        print(f"アカウント発行通知メール送信エラー: {e}")
+    if not sent:
+        # パスワードを伝えられないアカウントを残さない。申請は承認待ちのままなので再度承認できる
+        db.rollback()
+        return _account_request_page(request, "error", _find_account_request(db, token),
+                                     "通知メールの送信に失敗したため、アカウントは発行していません。時間をおいてもう一度お試しください。")
+
+    db.commit()
+    return _account_request_page(request, "approved", account_request)
+
+
+@app.post("/account-requests/{token}/reject", response_class=HTMLResponse)
+async def reject_account_request(request: Request, token: str, db: Session = Depends(get_db)):
+    account_request = _find_account_request(db, token)
+    if not account_request:
+        return _account_request_page(request, "invalid")
+    if account_request.status == "pending":
+        account_request.status = "rejected"
+        account_request.decided_at = datetime.utcnow()
+        db.commit()
+    return _account_request_page(request, account_request.status, account_request)
 
 # ログインページ表示
 @app.get("/login", response_class=HTMLResponse)
