@@ -16,7 +16,7 @@ import math
 import xml.etree.ElementTree as ET
 
 from database import get_db, create_tables, User, Activity, PasswordResetToken, Event, AccountRequest
-from auth import get_password_hash, verify_password, create_access_token, get_current_user
+from auth import get_password_hash, verify_password, create_access_token, get_current_user, password_fingerprint
 from email_validator import validate_email, EmailNotValidError
 from email_service import (
     send_password_reset_email, send_password_changed_email, send_new_account_email,
@@ -381,22 +381,71 @@ async def reset_password_page(request: Request, token: str = None):
     return templates.TemplateResponse("reset-password.html", {"request": request, "token": token})
 
 # ログイン
+# ログインの有効期間。年配の利用者が多く頻繁な再ログインは負担になるため長めにしている。
+# その代わり、試行回数の制限（総当たり対策）と、パスワード変更時の古いログイン無効化を入れている
+LOGIN_DAYS = 90
+ADMIN_LOGIN_DAYS = 7  # 管理者はユーザー管理や記録の編集ができるため短め
+
+# ログイン試行の回数制限（発行パスワードが数字6桁のため、総当たりを防ぐ）
+LOGIN_MAX_FAILURES = 5        # 同じユーザー名で続けて失敗できる回数
+LOGIN_IP_MAX_FAILURES = 20    # 同じ接続元から LOGIN_LOCK_MINUTES 内に失敗できる回数（ユーザー名を変えながらの試行対策）
+LOGIN_LOCK_MINUTES = 15
+LOGIN_LOCKED_MESSAGE = (
+    f"ログインに続けて失敗したため、しばらくログインできません。"
+    f"{LOGIN_LOCK_MINUTES}分ほど待ってからお試しください"
+)
+# 失敗した時刻の記録（キー: "user:名前" / "ip:アドレス"）。プロセス内のメモリに持つので再起動で消える
+_login_failures: Dict[str, List[datetime]] = {}
+
+
+def _recent_login_failures(key: str, now: datetime) -> List[datetime]:
+    since = now - timedelta(minutes=LOGIN_LOCK_MINUTES)
+    recent = [t for t in _login_failures.get(key, []) if t > since]
+    if recent:
+        _login_failures[key] = recent
+    else:
+        _login_failures.pop(key, None)
+    return recent
+
+
 @app.post("/login")
 async def login(
+    request: Request,
     username: str = Form(...),
     password: str = Form(...),
     db: Session = Depends(get_db)
 ):
+    now = datetime.utcnow()
+    # nginx 経由のため、接続元は X-Real-IP で受け取る
+    client_ip = request.headers.get("x-real-ip") or (request.client.host if request.client else "unknown")
+    user_key = f"user:{username.strip()}"
+    ip_key = f"ip:{client_ip}"
+
+    # ロック中は正しいパスワードでも通さない（通すと総当たりを続けられてしまう）
+    if (len(_recent_login_failures(user_key, now)) >= LOGIN_MAX_FAILURES
+            or len(_recent_login_failures(ip_key, now)) >= LOGIN_IP_MAX_FAILURES):
+        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=LOGIN_LOCKED_MESSAGE)
+
     user = db.query(User).filter(User.username == username).first()
     if not user or not verify_password(password, user.password_hash):
+        # 存在しないユーザー名でも同じように数える（アカウントの有無を探られないようにする）
+        if len(_login_failures) > 5000:
+            # 大量の名前で試された場合に記録が増え続けないよう、期限切れの分を掃除する
+            for key in list(_login_failures):
+                _recent_login_failures(key, now)
+        _login_failures.setdefault(user_key, []).append(now)
+        _login_failures.setdefault(ip_key, []).append(now)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="ユーザー名またはパスワードが正しくありません"
         )
-    
-    access_token_expires = timedelta(hours=12)
+
+    _login_failures.pop(user_key, None)
+
+    access_token_expires = timedelta(days=ADMIN_LOGIN_DAYS if user.is_admin else LOGIN_DAYS)
     access_token = create_access_token(
-        data={"sub": user.username}, expires_delta=access_token_expires
+        data={"sub": user.username, "pwv": password_fingerprint(user.password_hash)},
+        expires_delta=access_token_expires
     )
     return {"access_token": access_token, "token_type": "bearer"}
 

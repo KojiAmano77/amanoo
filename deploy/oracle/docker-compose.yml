@@ -1,0 +1,79 @@
+# Oracle Cloud（新サーバー）用の構成。
+# ConoHa では nginx を別管理（/home/koji/main-nginx）にしているが、こちらは
+# MySQL・アプリ・nginx・証明書更新を1つにまとめている（再起動時に nginx が
+# ネットワークから外れる問題を避けるため）。
+#
+# 起動: このフォルダ（deploy/oracle）で  docker compose up -d --build
+# 手順の詳細は README.md を参照。
+name: activity_map
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: team_activity_mysql
+    restart: unless-stopped
+    # 値は ConoHa 側の docker-compose.yml と同じ（.env の DATABASE_URL をそのまま使うため）
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: team_activities
+      MYSQL_USER: app_user
+      MYSQL_PASSWORD: app_password
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - activity_network
+
+  fastapi:
+    build:
+      context: ../../app
+      dockerfile: Dockerfile
+    container_name: activity_app
+    restart: unless-stopped
+    volumes:
+      - ../../app:/app
+      - ../../.env:/app/.env
+      # バックアップをメールで送るスクリプト用（send-backup.py 参照）
+      - ./send-backup.py:/opt/send-backup.py:ro
+      - ./backups:/backups:ro
+    depends_on:
+      - mysql
+    networks:
+      - activity_network
+    expose:
+      - "8000"
+
+  nginx:
+    image: nginx:alpine
+    container_name: main_nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./letsencrypt:/etc/letsencrypt:ro
+      - ./certbot-www:/var/www/certbot:ro
+    depends_on:
+      - fastapi
+    networks:
+      - activity_network
+    # certbot が更新した証明書を読み込むため、6時間ごとに設定を再読み込みする
+    command: /bin/sh -c 'while :; do sleep 6h & wait $${!}; nginx -s reload; done & nginx -g "daemon off;"'
+
+  certbot:
+    image: certbot/certbot:latest
+    container_name: activity_certbot
+    restart: unless-stopped
+    volumes:
+      - ./letsencrypt:/etc/letsencrypt
+      - ./certbot-www:/var/www/certbot
+    # 12時間ごとに更新を確認する（期限30日前になると実際に更新される）。
+    # nginx を止めない webroot 方式なので、ConoHa の renew-ssl.sh と cron は不要
+    entrypoint: /bin/sh -c 'trap exit TERM; while :; do certbot renew --webroot -w /var/www/certbot --quiet; sleep 12h & wait $${!}; done'
+
+volumes:
+  mysql_data:
+
+networks:
+  activity_network:
+    driver: bridge

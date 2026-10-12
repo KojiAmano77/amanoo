@@ -1,0 +1,4 @@
+# 新サーバー上で置く・生成されるファイル（秘密鍵や個人データを含むためgit管理しない）
+letsencrypt/
+certbot-www/
+backups/

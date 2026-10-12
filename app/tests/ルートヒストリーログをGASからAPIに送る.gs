@@ -19,12 +19,14 @@ const IMAGE_RESIZE_THRESHOLD_BYTES = 1000 * 1600; // これを超えるサイズ
 const IMAGE_MAX_DIMENSION = 1920; // リサイズ後の最大辺（px）。縦横比は維持、これより小さい画像は拡大しない
 const CHATWORK_UPLOAD_INTERVAL_MS = 1000; // 画像を連続投稿する際の間隔
 const CHATWORK_RETRY_WAIT_MS = 11000; // 投稿制限(429)に当たった際の再試行までの待ち時間
-// 活動報告の本文末尾に付ける、フォームと活動記録マップの案内（Chatworkの囲み枠記法）
-// 付けるのは GUIDE_ACTIVITIES の活動種類を GUIDE_ROOM_IDS のチャットに投稿するときのみ。
+// 活動報告の本文末尾に付ける案内（Chatworkの囲み枠記法）。GUIDE_ROOM_IDS のチャットに投稿するときのみ付ける。
+//   - MAP_GUIDE_ACTIVITIES の活動種類: フォームと活動記録マップの案内（GUIDE_FOOTER_WITH_MAP）
+//   - それ以外の活動種類: 地図にあまり関係しないため、フォームの案内だけ（GUIDE_FOOTER_FORM_ONLY）
 // 写真が複数あっても本文と同じく1回だけ表示される
-const GUIDE_ACTIVITIES = ['ポスティング', '街宣車活動'];
+const MAP_GUIDE_ACTIVITIES = ['ポスティング', '街宣車活動'];
 const GUIDE_ROOM_IDS = [roomId2]; // 12支部チャットのみ（支部外の方もいるチャットには案内を出さない）
-const GUIDE_FOOTER = `[info][title]📝 活動報告フォーム ／ 🗺 活動記録マップ[/title]活動報告はこちらから：https://forms.gle/Uwn6scBvFYA7qfZZ7
+const GUIDE_FOOTER_FORM_ONLY = `[info][title]📝 活動報告フォーム [/title]活動報告はこちらのGoogleフォームから：https://forms.gle/Uwn6scBvFYA7qfZZ7[/info]`;
+const GUIDE_FOOTER_WITH_MAP = `[info][title]📝 活動報告フォーム ／ 🗺 活動記録マップ[/title]活動報告はこちらから：https://forms.gle/Uwn6scBvFYA7qfZZ7
 活動のルートを地図で見る：https://sanseitoaichi12.f5.si/
 ※アカウントをお持ちでない方は、ログイン画面の「アカウント申請」からお気軽にどうぞ[/info]`;
 // フォーム「投稿先チャット」の選択肢 → ChatworkルームID の対応表
@@ -79,7 +81,7 @@ function onFormSubmit(e) {
   const answers = extractAnswers(e);
   const imageBlobs = getImageBlobsFromForm(e);
   const message = buildMessage(answers);
-  const showGuide = GUIDE_ACTIVITIES.includes(answers['活動種類']);
+  const guideFooter = MAP_GUIDE_ACTIVITIES.includes(answers['活動種類']) ? GUIDE_FOOTER_WITH_MAP : GUIDE_FOOTER_FORM_ONLY;
   const gpxContent = getGpxContentFromForm(e, answers);
 
   // GPXがあれば軌跡地図画像を自動生成し、手動添付画像と合わせて投稿する
@@ -94,7 +96,7 @@ function onFormSubmit(e) {
     Logger.log('投稿先チャット未選択（または対応表にない選択肢）のためChatwork投稿をスキップ: ' + answers['投稿先チャット']);
   }
   targetRoomIds.forEach(roomId => {
-    const guide = showGuide && GUIDE_ROOM_IDS.includes(roomId) ? GUIDE_FOOTER : '';
+    const guide = GUIDE_ROOM_IDS.includes(roomId) ? guideFooter : '';
     postToChatwork(roomId, message + guide, allImages);
   });
   registerWebAppUser(answers);      // Webアプリのアカウント自動発行（未登録の場合のみ）

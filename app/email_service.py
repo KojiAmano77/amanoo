@@ -21,7 +21,7 @@ SITE_URL = "https://sanseitoaichi12.f5.si"
 
 async def send_password_reset_email(to_email: str, reset_token: str):
     """パスワードリセット用のメールを送信"""
-    reset_url = f"https://amanoo.f5.si/reset-password?token={reset_token}"
+    reset_url = f"{SITE_URL}/reset-password?token={reset_token}"
     
     subject = "パスワードリセットのご案内"
     
