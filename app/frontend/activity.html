@@ -7,7 +7,7 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" integrity="sha384-5e2ESR8Ycmos6g3gAKr1Jvwye8sW4U1u/cAKulfVJnkakCcMqhOudbtPnvJ+nbv7" crossorigin="anonymous" />
-    <link rel="stylesheet" href="/static/css/activity.css?v=3">
+    <link rel="stylesheet" href="/static/css/activity.css?v=6">
 </head>
 <body>
     <div class="container">
@@ -187,6 +187,7 @@
                 <table class="activities-table">
                     <thead>
                         <tr>
+                            <th class="row-no">No.</th>
                             <th>担当者</th>
                             <th>日付</th>
                             <th>活動種別</th>
@@ -203,6 +204,9 @@
 
                 <div class="mobile-activity-list" id="team-activities-mobile">
                 </div>
+
+                <!-- ページ切り替え（1ページ50件） -->
+                <div class="pagination" id="team-pagination"></div>
             </div>
 
             <div id="admin-users" class="hidden">
@@ -300,6 +304,10 @@
                             <input type="checkbox" id="user-modal-is-admin"
                                 onchange="onPermissionChange('admin')"> 管理者
                         </label>
+                        <label class="checkbox-label" title="他人の記録も編集・削除できます（ユーザー管理はできません）">
+                            <input type="checkbox" id="user-modal-is-editor"
+                                onchange="onPermissionChange('editor')"> 記録編集者
+                        </label>
                         <label class="checkbox-label">
                             <input type="checkbox" id="user-modal-is-readonly"
                                 onchange="onPermissionChange('readonly')"> 閲覧専用
@@ -317,6 +325,6 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
     <script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
-    <script src="/static/js/activity.js?v=40"></script>
+    <script src="/static/js/activity.js?v=44"></script>
 </body>
 </html>

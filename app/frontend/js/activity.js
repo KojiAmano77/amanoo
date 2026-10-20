@@ -9,6 +9,11 @@ let currentPolygonGeoJSON = null;
 let currentUserId = null;
 let currentUserIsAdmin = false;
 let currentUserIsReadonly = false;
+let currentUserIsEditor = false;
+// 他人の記録も編集・削除できるか（管理者と記録編集者）
+function canEditAllRecords() {
+    return (currentUserIsAdmin || currentUserIsEditor) && !currentUserIsReadonly;
+}
 let currentUsername = null;
 let gpxTrackLayer = null;
 let gpxMarkers = [];
@@ -536,6 +541,7 @@ async function getCurrentUser() {
             currentUserId = user.id;
             currentUserIsAdmin = Boolean(user.is_admin);
             currentUserIsReadonly = Boolean(user.is_readonly);
+            currentUserIsEditor = Boolean(user.is_editor);
             currentUsername = user.username;
 
             // ヘッダーにユーザー名を表示
@@ -630,7 +636,7 @@ async function loadActivitiesOnMap() {
                 if (activity.polygon_coordinates) {
                     try {
                         const geoJSON = normalizeGeoJSON(activity.polygon_coordinates);
-                        const canDelete = !currentUserIsReadonly && (currentUserId === activity.user_id || currentUserIsAdmin);
+                        const canDelete = !currentUserIsReadonly && (currentUserId === activity.user_id || canEditAllRecords());
                         const deleteButton = canDelete
                             ? `<br><button onclick="window.deleteActivityFromMap(${activity.id})" class="delete-btn" style="background-color: #dc3545; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 12px;">🗑️ 削除</button>`
                             : '';
@@ -669,7 +675,7 @@ async function loadActivitiesOnMap() {
                         console.error('座標データの解析エラー:', err);
                         // フォールバック: マーカー表示
                         if (activity.latitude && activity.longitude) {
-                            const canDelete = !currentUserIsReadonly && (currentUserId === activity.user_id || currentUserIsAdmin);
+                            const canDelete = !currentUserIsReadonly && (currentUserId === activity.user_id || canEditAllRecords());
                             const deleteButton = canDelete
                                 ? `<br><button onclick="window.deleteActivityFromMap(${activity.id})" class="delete-btn" style="background-color: #dc3545; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 12px;">🗑️ 削除</button>`
                                 : '';
@@ -690,7 +696,7 @@ async function loadActivitiesOnMap() {
                     }
                 } else if (activity.latitude && activity.longitude) {
                     // ポリゴンデータがない場合は従来通りマーカー表示
-                    const canDelete = !currentUserIsReadonly && (currentUserId === activity.user_id || currentUserIsAdmin);
+                    const canDelete = !currentUserIsReadonly && (currentUserId === activity.user_id || canEditAllRecords());
                     const deleteButton = canDelete
                         ? `<br><button onclick="window.deleteActivityFromMap(${activity.id})" class="delete-btn" style="background-color: #dc3545; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 12px;">🗑️ 削除</button>`
                         : '';
@@ -874,6 +880,9 @@ async function loadMyActivities() {
 
 // 支部全体の活動記録を読み込み
 let cachedTeamActivities = [];
+// 支部記録タブのページ分け（50件 ≒ 直近1か月分）
+const TEAM_PAGE_SIZE = 50;
+let teamCurrentPage = 1;
 
 async function loadTeamActivities() {
     try {
@@ -881,7 +890,8 @@ async function loadTeamActivities() {
 
         if (response.ok) {
             cachedTeamActivities = await response.json();
-            displayTeamActivities(cachedTeamActivities);
+            // 編集・削除後の再読み込みでも、見ていたページを保つ
+            displayTeamActivities(cachedTeamActivities, teamCurrentPage);
         } else {
             showMessage('データの読み込みに失敗しました', 'error');
         }
@@ -1022,6 +1032,12 @@ function displayAdminUsers(users) {
     users.forEach(user => {
         const adminBtnText    = user.is_admin    ? '管理者解除' : '管理者付与';
         const readonlyBtnText = user.is_readonly ? '専用解除'   : '閲覧専用付与';
+        const editorBtnText   = user.is_editor   ? '編集者解除' : '編集者付与';
+        const editorBadge   = user.is_editor   ? '<span class="editor-badge">記録編集者</span>' : '';
+        // 管理者は記録編集者の権限を含む／閲覧専用とは両立しない
+        const editorDisabledReason = user.is_admin ? '管理者は記録編集者の権限を含んでいます'
+                                   : user.is_readonly ? '閲覧専用を解除してから付与してください' : '';
+        const editorDisabled = editorDisabledReason ? `disabled title="${editorDisabledReason}"` : '';
         const adminBadge    = user.is_admin    ? '<span class="admin-badge">管理者</span>'      : '';
         const readonlyBadge = user.is_readonly ? '<span class="readonly-badge">閲覧専用</span>' : '';
         const readonlyDisabled = user.is_admin ? 'disabled title="管理者は閲覧専用にできません"' : '';
@@ -1032,13 +1048,14 @@ function displayAdminUsers(users) {
         // ── デスクトップ用テーブル行 ──
         const row = tbody.insertRow();
         row.innerHTML = `
-            <td>${user.username}${adminBadge}${readonlyBadge}</td>
+            <td>${user.username}${adminBadge}${editorBadge}${readonlyBadge}</td>
             <td>${user.email || ''}</td>
             <td style="white-space:nowrap;">${createdAt}</td>
             <td style="white-space:nowrap;">${updatedAt}</td>
             <td class="admin-user-action-cell">
                 <button class="user-edit-btn" onclick='openUserModal(${userJson})'>編集</button>
                 <button class="admin-toggle-btn ${user.is_admin ? 'active' : ''}" onclick="toggleAdminUser(${user.id})">${adminBtnText}</button>
+                <button class="editor-toggle-btn ${user.is_editor ? 'active' : ''}" onclick="toggleEditorUser(${user.id})" ${editorDisabled}>${editorBtnText}</button>
                 <button class="readonly-toggle-btn ${user.is_readonly ? 'active' : ''}" onclick="toggleReadonlyUser(${user.id})" ${readonlyDisabled}>${readonlyBtnText}</button>
             </td>
         `;
@@ -1050,7 +1067,7 @@ function displayAdminUsers(users) {
 
         const cardContent = document.createElement('div');
         cardContent.innerHTML = `
-            <div class="activity-header">${user.username}${adminBadge}${readonlyBadge}</div>
+            <div class="activity-header">${user.username}${adminBadge}${editorBadge}${readonlyBadge}</div>
             ${user.email ? `<div class="activity-details">📧 ${user.email}</div>` : ''}
             <div class="activity-details">登録日: ${createdAt}　更新日: ${updatedAt}</div>
         `;
@@ -1078,8 +1095,18 @@ function displayAdminUsers(users) {
             readonlyBtn.title = '管理者は閲覧専用にできません';
         }
 
+        const editorBtn = document.createElement('button');
+        editorBtn.className = `editor-toggle-btn${user.is_editor ? ' active' : ''}`;
+        editorBtn.textContent = editorBtnText;
+        editorBtn.onclick = () => toggleEditorUser(user.id);
+        if (editorDisabledReason) {
+            editorBtn.disabled = true;
+            editorBtn.title = editorDisabledReason;
+        }
+
         cardActions.appendChild(editBtn);
         cardActions.appendChild(adminBtn);
+        cardActions.appendChild(editorBtn);
         cardActions.appendChild(readonlyBtn);
 
         card.appendChild(cardContent);
@@ -1110,6 +1137,7 @@ function openUserModal(user = null) {
         document.getElementById('user-modal-password').value  = '';
         document.getElementById('user-modal-is-admin').checked    = !!user.is_admin;
         document.getElementById('user-modal-is-readonly').checked = !!user.is_readonly;
+        document.getElementById('user-modal-is-editor').checked   = !!user.is_editor;
     } else {
         title.textContent = '👤 ユーザー登録';
         okBtn.textContent = '登録';
@@ -1120,6 +1148,7 @@ function openUserModal(user = null) {
         document.getElementById('user-modal-password').value  = '';
         document.getElementById('user-modal-is-admin').checked    = false;
         document.getElementById('user-modal-is-readonly').checked = false;
+        document.getElementById('user-modal-is-editor').checked   = false;
     }
 
     _syncPermissionUI();
@@ -1131,15 +1160,22 @@ function closeUserModal() {
     editingUserId = null;
 }
 
-// is_admin / is_readonly の相互排他を UI 上で反映
+// 権限の組み合わせを UI 上で反映
+//   管理者は記録編集者の権限を含む（編集者のチェックは不要）／閲覧専用は管理者・記録編集者と両立しない
 function onPermissionChange(changed) {
     const adminChk    = document.getElementById('user-modal-is-admin');
     const readonlyChk = document.getElementById('user-modal-is-readonly');
+    const editorChk   = document.getElementById('user-modal-is-editor');
     if (changed === 'admin' && adminChk.checked) {
-        readonlyChk.checked  = false;
+        readonlyChk.checked = false;
+        editorChk.checked   = false;
+    }
+    if (changed === 'editor' && editorChk.checked) {
+        readonlyChk.checked = false;
     }
     if (changed === 'readonly' && readonlyChk.checked) {
-        adminChk.checked = false;
+        adminChk.checked  = false;
+        editorChk.checked = false;
     }
     _syncPermissionUI();
 }
@@ -1147,8 +1183,10 @@ function onPermissionChange(changed) {
 function _syncPermissionUI() {
     const adminChk    = document.getElementById('user-modal-is-admin');
     const readonlyChk = document.getElementById('user-modal-is-readonly');
-    readonlyChk.disabled = adminChk.checked;
+    const editorChk   = document.getElementById('user-modal-is-editor');
+    readonlyChk.disabled = adminChk.checked || editorChk.checked;
     adminChk.disabled    = readonlyChk.checked;
+    editorChk.disabled   = adminChk.checked || readonlyChk.checked;
 }
 
 async function submitUserModal() {
@@ -1157,6 +1195,7 @@ async function submitUserModal() {
     const password  = document.getElementById('user-modal-password').value;
     const isAdmin   = document.getElementById('user-modal-is-admin').checked;
     const isReadonly = document.getElementById('user-modal-is-readonly').checked;
+    const isEditor   = document.getElementById('user-modal-is-editor').checked;
 
     if (!username) { showMessage('ユーザー名を入力してください', 'error'); return; }
     if (!editingUserId && !password) { showMessage('パスワードを入力してください', 'error'); return; }
@@ -1170,6 +1209,7 @@ async function submitUserModal() {
         email: email || null,
         is_admin: isAdmin,
         is_readonly: isReadonly,
+        is_editor: isEditor,
     };
     if (!editingUserId || password.trim()) {
         body.password = password;
@@ -1200,6 +1240,23 @@ async function submitUserModal() {
         okBtn.textContent = editingUserId ? '保存' : '登録';
     }
 }
+
+window.toggleEditorUser = async function(userId) {
+    try {
+        const response = await fetchWithAuth(`/admin/users/${userId}/toggle-editor`, { method: 'POST' });
+        if (response.ok) {
+            showMessage('権限を更新しました', 'success');
+            loadAdminUsers();
+        } else {
+            const result = await response.json().catch(() => ({}));
+            showMessage(result.detail || '権限の更新に失敗しました', 'error');
+        }
+    } catch (error) {
+        if (error.message !== 'Unauthorized') {
+            showMessage('ネットワークエラー', 'error');
+        }
+    }
+};
 
 window.toggleAdminUser = async function(userId) {
     try {
@@ -1320,7 +1377,8 @@ function displayMyActivities(activities) {
 }
 
 // 支部全体の活動記録表示
-function displayTeamActivities(activities) {
+// 絞り込み条件が変わったときは1ページ目から表示する（page 省略時）
+function displayTeamActivities(activities, page = 1) {
     const tbody = document.getElementById('team-activities-tbody');
     const mobileList = document.getElementById('team-activities-mobile');
 
@@ -1330,7 +1388,7 @@ function displayTeamActivities(activities) {
     // 管理者の場合は「操作」列ヘッダーを表示
     const actionHeader = document.getElementById('team-action-header');
     if (actionHeader) {
-        actionHeader.classList.toggle('hidden', !currentUserIsAdmin);
+        actionHeader.classList.toggle('hidden', !canEditAllRecords());
     }
 
     // 期間・担当者・種別・キーワードはAND、ポスティングビラ種別チェック（ポスティングのみ対象）はORで絞り込み（上部フィルターと連動）
@@ -1349,23 +1407,32 @@ function displayTeamActivities(activities) {
         })
         .sort((a, b) => new Date(b.date) - new Date(a.date));
 
-    filteredActivities.forEach(activity => {
+    // 該当ページの分だけ描画する（削除で件数が減った場合などは最終ページに丸める）
+    const totalPages = Math.max(1, Math.ceil(filteredActivities.length / TEAM_PAGE_SIZE));
+    teamCurrentPage = Math.min(Math.max(1, page), totalPages);
+    const pageStart = (teamCurrentPage - 1) * TEAM_PAGE_SIZE;
+    const pageActivities = filteredActivities.slice(pageStart, pageStart + TEAM_PAGE_SIZE);
+    renderTeamPagination(filteredActivities.length, totalPages, pageStart, pageActivities.length);
+
+    pageActivities.forEach((activity, index) => {
+        const rowNo = pageStart + index + 1; // 新しい順の通し番号（ページをまたいで続く）
         const date = new Date(activity.date).toLocaleDateString('ja-JP');
 
         // デスクトップ用テーブル
         const row = tbody.insertRow();
         const teamDistanceText = activity.distance_km != null ? `${activity.distance_km.toFixed(2)} km` : '-';
         row.innerHTML = `
+            <td class="row-no">${rowNo}</td>
             <td>${activity.username}</td>
             <td>${date}</td>
             <td>${activity.activity_type}</td>
-            <td>${createLocationDisplay(activity.latitude, activity.longitude, activity.location, activity.location_name)}</td>
+            <td>${createRecordLocationDisplay(activity)}</td>
             <td>${activity.memo || ''}</td>
             <td style="white-space:nowrap;">${teamDistanceText}</td>
         `;
         row.appendChild(createColorCell(activity));
 
-        if (currentUserIsAdmin) {
+        if (canEditAllRecords()) {
             const td = document.createElement('td');
             td.className = 'team-action-cell';
             const editBtn = document.createElement('button');
@@ -1387,9 +1454,9 @@ function displayTeamActivities(activities) {
 
         const cardContent = document.createElement('div');
         cardContent.innerHTML = `
-            <div class="activity-header">${activity.activity_type} - ${activity.username}</div>
+            <div class="activity-header"><span class="row-no">No.${rowNo}</span> ${activity.activity_type} - ${activity.username}</div>
             <div class="activity-details">日付: ${date}</div>
-            <div class="activity-details">場所: ${createLocationDisplay(activity.latitude, activity.longitude, activity.location, activity.location_name)}</div>
+            <div class="activity-details">場所: ${createRecordLocationDisplay(activity)}</div>
             ${activity.distance_km != null ? `<div class="activity-details">距離: ${activity.distance_km.toFixed(2)} km</div>` : ''}
             ${activity.memo ? `<div class="activity-details">メモ: ${activity.memo}</div>` : ''}
         `;
@@ -1401,7 +1468,7 @@ function displayTeamActivities(activities) {
             card.appendChild(colorTd);
         }
 
-        if (currentUserIsAdmin) {
+        if (canEditAllRecords()) {
             const cardActions = document.createElement('div');
             cardActions.className = 'action-buttons';
             const cardEditBtn = document.createElement('button');
@@ -1419,6 +1486,34 @@ function displayTeamActivities(activities) {
 
         mobileList.appendChild(card);
     });
+}
+
+// 支部記録のページ切り替え欄（50件以下のときは件数だけ表示し、ボタンは出さない）
+function renderTeamPagination(totalCount, totalPages, pageStart, pageCount) {
+    const el = document.getElementById('team-pagination');
+    if (!el) return;
+
+    if (totalPages <= 1) {
+        el.innerHTML = `<span class="pagination-info">全${totalCount}件</span>`;
+        return;
+    }
+
+    const isFirst = teamCurrentPage === 1;
+    const isLast = teamCurrentPage === totalPages;
+    el.innerHTML = `
+        <button class="pagination-btn" onclick="goToTeamPage(${teamCurrentPage - 1})" ${isFirst ? 'disabled' : ''}>« 前へ</button>
+        <span class="pagination-info">
+            <span class="pagination-page">${teamCurrentPage} / ${totalPages} ページ</span>
+            <span class="pagination-range">（全${totalCount}件中 ${pageStart + 1}〜${pageStart + pageCount}件目）</span>
+        </span>
+        <button class="pagination-btn" onclick="goToTeamPage(${teamCurrentPage + 1})" ${isLast ? 'disabled' : ''}>次へ »</button>
+    `;
+}
+
+function goToTeamPage(page) {
+    displayTeamActivities(cachedTeamActivities, page);
+    const section = document.getElementById('team-activities');
+    if (section) section.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 // ===== 管理者専用：支部記録編集ダイアログ =====
@@ -1716,6 +1811,26 @@ async function getLocationName(lat, lng, fallbackText) {
     const result = fallbackText || `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
     geocodeCache.set(cacheKey, result);
     return result;
+}
+
+// 支部記録の場所表示：記録の「場所」の文字列をそのまま表示する（座標からの住所取得はしない）。
+// 場所が空なら座標を表示。座標があればクリックで地図に移動できる
+function createRecordLocationDisplay(activity) {
+    const lat = activity.latitude;
+    const lng = activity.longitude;
+    const hasCoords = lat != null && lng != null;
+    const coordsText = hasCoords ? `${lat.toFixed(5)}, ${lng.toFixed(5)}` : '';
+    const locationText = (activity.location || '').trim();
+    const label = escapeHtml(locationText || coordsText || '位置情報なし');
+
+    if (!hasCoords) {
+        return `<span class="location-text">${label}</span>`;
+    }
+    return `<span class="location-clickable" onclick="showOnMap(${lat}, ${lng})" title="クリックで地図表示 (${coordsText})">${label}</span>`;
+}
+
+function escapeHtml(text) {
+    return String(text).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
 }
 
 // 場所表示を生成（データベースの場所名を優先使用）
@@ -2096,6 +2211,7 @@ function setDefaultDateRange() {
 // すべてのデータを再読み込み
 function refreshAllData() {
     loadMyActivities();
+    teamCurrentPage = 1; // 期間を変えたら支部記録は1ページ目から表示する
     loadTeamActivities();
     loadActivitiesOnMap();
 }

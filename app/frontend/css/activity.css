@@ -1151,3 +1151,108 @@ button:active {
     }
 }
 
+
+/* 支部記録のページ切り替え */
+.pagination {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 12px;
+    margin: 16px 0 8px;
+    flex-wrap: wrap;
+}
+.pagination-btn {
+    padding: 10px 18px;
+    background: #FF9800;
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    font-size: 15px;
+    font-weight: bold;
+    cursor: pointer;
+    white-space: nowrap;
+}
+.pagination-btn:hover:not(:disabled) {
+    background: #F57C00;
+}
+.pagination-btn:disabled {
+    background: #ddd;
+    color: #999;
+    cursor: default;
+}
+.pagination-info {
+    color: #555;
+    font-size: 14px;
+    text-align: center;
+}
+.pagination-page {
+    font-weight: bold;
+    white-space: nowrap;
+}
+.pagination-range {
+    white-space: nowrap;
+}
+@media (max-width: 480px) {
+    .pagination {
+        gap: 8px;
+    }
+    .pagination-btn {
+        padding: 10px 12px;
+        font-size: 14px;
+    }
+    /* スマホではページ番号と件数を2行にして、ボタンと同じ行に収める */
+    .pagination-info {
+        display: flex;
+        flex-direction: column;
+        font-size: 13px;
+    }
+}
+
+/* 支部記録の通し番号 */
+.activities-table .row-no {
+    width: 1%;
+    white-space: nowrap;
+    text-align: right;
+    color: #888;
+}
+.activity-header .row-no {
+    color: #888;
+    font-weight: normal;
+    margin-right: 4px;
+}
+
+/* 記録編集者（他人の記録も編集・削除できる。ユーザー管理は不可） */
+.editor-badge {
+    display: inline-block;
+    background: #e3f2fd;
+    color: #0d47a1;
+    border: 1px solid #1e88e5;
+    border-radius: 10px;
+    font-size: 10px;
+    padding: 1px 6px;
+    margin-left: 4px;
+}
+.editor-toggle-btn {
+    padding: 6px 10px;
+    font-size: 12px;
+    width: auto;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    color: white;
+    background-color: #1e88e5;
+}
+.editor-toggle-btn:hover {
+    background-color: #1565c0;
+}
+.editor-toggle-btn.active {
+    background-color: #e74c3c;
+}
+.editor-toggle-btn.active:hover {
+    background-color: #c0392b;
+}
+.editor-toggle-btn:disabled {
+    background-color: #ccc;
+    color: #888;
+    cursor: not-allowed;
+}

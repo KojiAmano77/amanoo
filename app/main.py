@@ -167,6 +167,7 @@ class AdminUserCreateRequest(BaseModel):
     password: str
     is_admin: bool = False
     is_readonly: bool = False
+    is_editor: bool = False
 
 
 class AdminUserUpdateRequest(BaseModel):
@@ -175,6 +176,7 @@ class AdminUserUpdateRequest(BaseModel):
     password: Optional[str] = None   # 空欄なら変更なし
     is_admin: bool = False
     is_readonly: bool = False
+    is_editor: bool = False
 
 
 class FormActivityRequest(BaseModel):
@@ -759,7 +761,8 @@ async def get_current_user_info(current_user: User = Depends(get_current_user)):
         "username": current_user.username,
         "email": current_user.email,
         "is_admin": current_user.is_admin,
-        "is_readonly": current_user.is_readonly
+        "is_readonly": current_user.is_readonly,
+        "is_editor": current_user.is_editor
     }
 
 @app.get("/admin/users")
@@ -771,18 +774,22 @@ async def list_admin_users(
         raise HTTPException(status_code=403, detail="管理者権限が必要です")
 
     users = db.query(User).order_by(User.id).all()
-    return [
-        {
-            "id": user.id,
-            "username": user.username,
-            "email": user.email,
-            "is_admin": user.is_admin,
-            "is_readonly": user.is_readonly,
-            "created_at": user.created_at.isoformat() if user.created_at else None,
-            "updated_at": user.updated_at.isoformat() if user.updated_at else None,
-        }
-        for user in users
-    ]
+    return [_user_response(user) for user in users]
+
+
+def _can_edit_any_activity(user: User) -> bool:
+    """他人の記録も編集・削除できるか（管理者と記録編集者）"""
+    return bool(user.is_admin or user.is_editor) and not user.is_readonly
+
+
+def _normalize_permissions(user: User) -> None:
+    """権限の組み合わせを整える。管理者は記録編集者の権限を含むので編集者フラグは外す。
+    閲覧専用は管理者・記録編集者と両立しないので、強い権限が付いていれば閲覧専用を外す"""
+    if user.is_admin:
+        user.is_editor = False
+        user.is_readonly = False
+    elif user.is_editor:
+        user.is_readonly = False
 
 
 def _user_response(user: User) -> dict:
@@ -792,6 +799,7 @@ def _user_response(user: User) -> dict:
         "email": user.email,
         "is_admin": user.is_admin,
         "is_readonly": user.is_readonly,
+        "is_editor": user.is_editor,
         "created_at": user.created_at.isoformat() if user.created_at else None,
         "updated_at": user.updated_at.isoformat() if user.updated_at else None,
     }
@@ -812,19 +820,15 @@ async def admin_create_user(
     if body.email and db.query(User).filter(User.email == body.email).first():
         raise HTTPException(status_code=400, detail="このメールアドレスは既に使用されています")
 
-    # 相互排他：管理者 → 閲覧専用を解除
-    is_admin = body.is_admin
-    is_readonly = body.is_readonly
-    if is_admin:
-        is_readonly = False
-
     new_user = User(
         username=body.username,
         email=body.email or None,
         password_hash=get_password_hash(body.password),
-        is_admin=is_admin,
-        is_readonly=is_readonly,
+        is_admin=body.is_admin,
+        is_readonly=body.is_readonly,
+        is_editor=body.is_editor,
     )
+    _normalize_permissions(new_user)
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
@@ -861,11 +865,10 @@ async def admin_update_user(
     if body.password and body.password.strip():
         target.password_hash = get_password_hash(body.password)
 
-    # 相互排他：管理者 → 閲覧専用を解除
     target.is_admin = body.is_admin
     target.is_readonly = body.is_readonly
-    if body.is_admin:
-        target.is_readonly = False
+    target.is_editor = body.is_editor
+    _normalize_permissions(target)
 
     target.updated_at = datetime.utcnow()
     db.commit()
@@ -887,16 +890,12 @@ async def toggle_readonly_user(
         raise HTTPException(status_code=404, detail="ユーザーが見つかりません")
 
     target_user.is_readonly = not target_user.is_readonly
-    # 閲覧専用にする場合は管理者権限を剥奪（相互排他）
+    # 閲覧専用にする場合は管理者・記録編集者の権限を外す（相互排他）
     if target_user.is_readonly:
         target_user.is_admin = False
+        target_user.is_editor = False
     db.commit()
-    return {
-        "id": target_user.id,
-        "username": target_user.username,
-        "is_admin": target_user.is_admin,
-        "is_readonly": target_user.is_readonly
-    }
+    return _user_response(target_user)
 
 @app.post("/admin/users/{user_id}/toggle-admin")
 async def toggle_admin_user(
@@ -912,16 +911,31 @@ async def toggle_admin_user(
         raise HTTPException(status_code=404, detail="ユーザーが見つかりません")
 
     target_user.is_admin = not target_user.is_admin
-    # 管理者にする場合は閲覧専用を解除（相互排他）
-    if target_user.is_admin:
-        target_user.is_readonly = False
+    _normalize_permissions(target_user)
     db.commit()
-    return {
-        "id": target_user.id,
-        "username": target_user.username,
-        "is_admin": target_user.is_admin,
-        "is_readonly": target_user.is_readonly
-    }
+    return _user_response(target_user)
+
+
+@app.post("/admin/users/{user_id}/toggle-editor")
+async def toggle_editor_user(
+    user_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """記録編集者（他人の記録も編集・削除できる。ユーザー管理は不可）の付与・解除"""
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="管理者権限が必要です")
+
+    target_user = db.query(User).filter(User.id == user_id).first()
+    if not target_user:
+        raise HTTPException(status_code=404, detail="ユーザーが見つかりません")
+    if target_user.is_admin:
+        raise HTTPException(status_code=400, detail="管理者は記録編集者の権限を含んでいます")
+
+    target_user.is_editor = not target_user.is_editor
+    _normalize_permissions(target_user)
+    db.commit()
+    return _user_response(target_user)
 
 # すべての活動記録を取得（支部全体）
 @app.get("/activities/all")
@@ -968,7 +982,9 @@ async def update_activity(
     
     if not activity:
         raise HTTPException(status_code=404, detail="Activity not found")
-    if activity.user_id != current_user.id and not current_user.is_admin:
+    if current_user.is_readonly:
+        raise HTTPException(status_code=403, detail="閲覧専用アカウントのため編集はできません")
+    if activity.user_id != current_user.id and not _can_edit_any_activity(current_user):
         raise HTTPException(status_code=403, detail="この記録を編集する権限がありません")
     
     activity.activity_type = activity_type
@@ -995,7 +1011,7 @@ async def delete_activity(
         raise HTTPException(status_code=404, detail="Activity not found")
     if current_user.is_readonly:
         raise HTTPException(status_code=403, detail="閲覧専用アカウントのため削除はできません")
-    if activity.user_id != current_user.id and not current_user.is_admin:
+    if activity.user_id != current_user.id and not _can_edit_any_activity(current_user):
         raise HTTPException(status_code=403, detail="この記録を削除する権限がありません")
 
     db.delete(activity)
@@ -1011,8 +1027,8 @@ async def admin_update_activity(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    if not current_user.is_admin:
-        raise HTTPException(status_code=403, detail="管理者権限が必要です")
+    if not _can_edit_any_activity(current_user):
+        raise HTTPException(status_code=403, detail="管理者または記録編集者の権限が必要です")
 
     activity = db.query(Activity).filter(Activity.id == activity_id).first()
     if not activity:

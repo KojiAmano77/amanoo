@@ -15,7 +15,7 @@ const GEOAPIFY_API_KEY = scriptProps.getProperty('GEOAPIFY_API_KEY'); // 軌跡�
 // APIシークレットは不要（unsigned presetのため。安全のためコードには含めない）
 const CLOUDINARY_CLOUD_NAME = "e3edgpjb";
 const CLOUDINARY_UPLOAD_PRESET = "chatwork_resize";
-const IMAGE_RESIZE_THRESHOLD_BYTES = 1000 * 1600; // これを超えるサイズの画像のみリサイズ対象（1MB）
+const IMAGE_RESIZE_THRESHOLD_BYTES = 1000 * 1000; // これを超えるサイズの画像のみリサイズ対象（1MB）
 const IMAGE_MAX_DIMENSION = 1920; // リサイズ後の最大辺（px）。縦横比は維持、これより小さい画像は拡大しない
 const CHATWORK_UPLOAD_INTERVAL_MS = 1000; // 画像を連続投稿する際の間隔
 const CHATWORK_RETRY_WAIT_MS = 11000; // 投稿制限(429)に当たった際の再試行までの待ち時間
@@ -188,10 +188,18 @@ ${report}
       const numOfVisit = a["訪問件数（留守宅含む）"] || "";
       const report = a["活動報告（あいさつ）"] || "";
 
+      // 名簿獲得件数と、訪問時の感触の内訳（フォームの質問タイトルがそのまま項目名）
+      // すべて未回答なら行ごと出さない。一部だけ未回答の項目は 0 と表示する
+      const BREAKDOWN_ITEMS = ["名簿", "◎", "○", "△", "✅", "×"];
+      const counts = BREAKDOWN_ITEMS.map(item => String(a[item] || "").trim());
+      const breakdown = counts.some(Boolean)
+        ? BREAKDOWN_ITEMS.map((item, i) => `${item}：${counts[i] || 0}\n`).join("")
+        : "";
+
       return `${header}
 活動場所：${visitArea}
 活動結果：${numOfVisit}件訪問
-${report}
+${breakdown}${report}
 `;
     }
 
