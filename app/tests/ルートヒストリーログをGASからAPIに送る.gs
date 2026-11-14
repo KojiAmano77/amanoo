@@ -25,10 +25,13 @@ const CHATWORK_RETRY_WAIT_MS = 11000; // 投稿制限(429)に当たった際の�
 // 写真が複数あっても本文と同じく1回だけ表示される
 const MAP_GUIDE_ACTIVITIES = ['ポスティング', '街宣車活動'];
 const GUIDE_ROOM_IDS = [roomId2]; // 12支部チャットのみ（支部外の方もいるチャットには案内を出さない）
-const GUIDE_FOOTER_FORM_ONLY = `[info][title]📝 活動報告フォーム [/title]活動報告はこちらのGoogleフォームから：https://forms.gle/Uwn6scBvFYA7qfZZ7[/info]`;
-const GUIDE_FOOTER_WITH_MAP = `[info][title]📝 活動報告フォーム ／ 🗺 活動記録マップ[/title]活動報告はこちらから：https://forms.gle/Uwn6scBvFYA7qfZZ7
-活動のルートを地図で見る：https://sanseitoaichi12.f5.si/
-※アカウントをお持ちでない方は、ログイン画面の「アカウント申請」からお気軽にどうぞ[/info]`;
+const GUIDE_FOOTER_FORM_ONLY = `[info]
+📝フォーム https://forms.gle/Uwn6scBvFYA7qfZZ7
+[/info]`;
+const GUIDE_FOOTER_WITH_MAP = `[info]
+📝フォーム https://forms.gle/Uwn6scBvFYA7qfZZ7
+🗺地図 https://sanseitoaichi12.f5.si/
+[/info]`;
 // フォーム「投稿先チャット」の選択肢 → ChatworkルームID の対応表
 // 選択肢を増やす場合は、フォームの選択肢の文言とまったく同じ文字列でここに追加する
 const CHATROOM_OPTIONS = {
@@ -190,7 +193,7 @@ ${report}
 
       // 名簿獲得件数と、訪問時の感触の内訳（フォームの質問タイトルがそのまま項目名）
       // すべて未回答なら行ごと出さない。一部だけ未回答の項目は 0 と表示する
-      const BREAKDOWN_ITEMS = ["名簿", "◎", "○", "△", "✅", "×"];
+      const BREAKDOWN_ITEMS = ["◎", "〇", "△", "✅", "×","名簿"];
       const counts = BREAKDOWN_ITEMS.map(item => String(a[item] || "").trim());
       const breakdown = counts.some(Boolean)
         ? BREAKDOWN_ITEMS.map((item, i) => `${item}：${counts[i] || 0}\n`).join("")
@@ -388,7 +391,7 @@ function getImageBlobsFromForm(e) {
       "ポスティングエリア（画像添付任意）",
       "活動エリア（画像添付）",
       "貼付け後の写真",
-      "活動時の写真" // 辻立ち・駅立ちセクション（最大10枚）
+      "活動時の写真" // 辻立ち・駅立ち／街宣車活動セクション共通（最大10枚）。同名の質問はどのセクションでも対象になる
     ].includes(r.getItem().getTitle().trim())) {
 
       const fileIds = r.getResponse();

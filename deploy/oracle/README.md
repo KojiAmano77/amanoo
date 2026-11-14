@@ -52,6 +52,18 @@ ConoHa の現在のIPは `160.251.173.105` です。
 
 ### 2-1. Docker を入れる（新サーバー）
 
+AMD の `VM.Standard.E2.1.Micro`（メモリ1GB）で作った場合は、先にスワップ（メモリ不足時の退避領域）を2GB作っておきます。
+Ampere で作った場合は不要です。
+
+```bash
+sudo fallocate -l 2G /swapfile
+sudo chmod 600 /swapfile
+sudo mkswap /swapfile
+sudo swapon /swapfile
+echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+free -h      # Swap が 2.0Gi になっていること
+```
+
 ```bash
 curl -fsSL https://get.docker.com | sudo sh
 sudo usermod -aG docker ubuntu

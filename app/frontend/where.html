@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#111827">
+<title>いまどこ町名</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+  :root {
+    --bg: #111827; --fg: #f9fafb; --sub: #9ca3af; --accent: #facc15;
+    --card: #1f2937; --ok: #22c55e; --warn: #f97316;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg);
+    font-family: "Hiragino Sans", "Noto Sans JP", "Meiryo", sans-serif; }
+  body { display: flex; flex-direction: column; }
+  #top { padding: 16px 16px 8px; text-align: center; }
+  #muni { font-size: 1.4rem; color: var(--sub); min-height: 1.6em; }
+  #town { font-size: clamp(3rem, 16vw, 7rem); font-weight: 800; color: var(--accent);
+    line-height: 1.15; word-break: keep-all; overflow-wrap: anywhere; min-height: 1.2em; }
+  #chome { font-size: 2rem; font-weight: 700; min-height: 1.3em; }
+  /* 漢字の横の（ふりがな） */
+  .yomi { display: inline-block; font-size: .42em; font-weight: 700; color: var(--fg);
+    vertical-align: middle; letter-spacing: .02em; }
+  #chome .yomi { font-size: .8em; }
+  .yomi.unknown { color: var(--sub); font-weight: 600; }
+  #muni .ck { color: var(--sub); font-weight: 600; }
+  #full { font-size: 1rem; color: var(--sub); margin-top: 4px; }
+  #status { display: flex; justify-content: center; gap: 12px; font-size: .9rem; color: var(--sub);
+    padding: 4px 16px 8px; flex-wrap: wrap; }
+  .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--warn);
+    margin-right: 4px; vertical-align: middle; }
+  .dot.ok { background: var(--ok); }
+  #history { padding: 0 16px 8px; font-size: 1rem; color: var(--sub); text-align: center; min-height: 1.4em; }
+  #history b { color: var(--fg); font-weight: 600; }
+  #map { flex: 1; min-height: 200px; }
+  #map.hidden { display: none; }
+  #bar { display: flex; gap: 8px; padding: 8px 16px calc(8px + env(safe-area-inset-bottom)); }
+  #bar button, #bar a { flex: 1; padding: 12px; font-size: 1rem; border: none; border-radius: 10px;
+    background: var(--card); color: var(--fg); text-align: center; text-decoration: none;
+    font-family: inherit; line-height: 1.2; display: flex; align-items: center; justify-content: center; }
+  #start { position: fixed; inset: 0; background: rgba(17,24,39,.96); display: flex;
+    flex-direction: column; align-items: center; justify-content: center; gap: 16px; padding: 24px;
+    text-align: center; z-index: 2000; }
+  #start button { font-size: 1.4rem; padding: 18px 36px; border-radius: 14px; border: none;
+    background: var(--accent); color: #111; font-weight: 800; }
+  #start p { color: var(--sub); line-height: 1.6; margin: 0; }
+</style>
+</head>
+<body>
+
+<div id="start">
+  <div style="font-size:1.6rem;font-weight:800">いまどこ町名</div>
+  <p>5秒ごとに現在地の町名を表示します。<br>位置情報の利用を「許可」してください。</p>
+  <button id="startBtn">開始</button>
+</div>
+
+<div id="top">
+  <div id="muni">&nbsp;</div>
+  <div id="town">取得中…</div>
+  <div id="chome">&nbsp;</div>
+  <div id="full">&nbsp;</div>
+</div>
+<div id="status">
+  <span><span id="gpsDot" class="dot"></span><span id="gpsText">GPS待機</span></span>
+  <span id="acc"></span>
+  <span id="updated"></span>
+</div>
+<div id="history"></div>
+<div id="map"></div>
+<div id="bar">
+  <a id="backBtn" href="/activity">← 活動記録マップ</a>
+  <button id="mapBtn">地図を隠す</button>
+  <button id="nowBtn">今すぐ更新</button>
+</div>
+
+<script>var GSI = {};</script>
+<script src="https://maps.gsi.go.jp/js/muni.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+(() => {
+  const INTERVAL_MS = 5000;
+  const RGEO = "https://mreversegeocoder.gsi.go.jp/reverse-geocoder/LonLatToAddress";
+  // 町名の読み：①自前データ（日本郵便の郵便番号データから作成 /static/kana/NN.json）
+  //            ②見つからなければ HeartRails Geo API（無料・キー不要）
+  const LOCAL_KANA = "/static/kana/";
+  const KANA_API = "https://geoapi.heartrails.com/api/json";
+  const KANA_CACHE_KEY = "where-town-kana-v1";
+  const NBSP = "\u00a0";
+  const $ = id => document.getElementById(id);
+
+  let latest = null;          // 最新のGPS位置
+  let lastQueried = null;     // 最後に住所を問い合わせた位置
+  let lastTown = null;
+  const history = [];         // 直前に通過した町名
+  let map, marker, circle, follow = true;
+  let wakeLock = null;
+
+  // --- 地図（国土地理院 淡色地図：無料） ---
+  function initMap() {
+    map = L.map("map", { zoomControl: false, attributionControl: true }).setView([34.95, 137.17], 16);
+    L.tileLayer("https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png", {
+      maxZoom: 18,
+      attribution: '<a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank">国土地理院</a>'
+    }).addTo(map);
+    marker = L.circleMarker([0, 0], { radius: 9, color: "#fff", weight: 3, fillColor: "#2563eb", fillOpacity: 1 }).addTo(map);
+    circle = L.circle([0, 0], { radius: 0, color: "#2563eb", weight: 1, fillOpacity: .1 }).addTo(map);
+    map.on("dragstart", () => { follow = false; });
+  }
+
+  // --- 市区町村コード → 名称 ---
+  function muniName(code) {
+    const arr = GSI.MUNI_ARRAY || {};
+    const v = arr[code] || arr[String(parseInt(code, 10))];
+    if (!v) return { pref: "", city: "" };
+    const p = v.split(",");
+    return { pref: p[1] || "", city: (p[3] || "").replace(/　/g, "") };
+  }
+
+  // 「両町一丁目」→ ["両町", "一丁目"]
+  function splitChome(name) {
+    const m = name.match(/^(.+?)([0-9０-９一二三四五六七八九十]+丁目)$/);
+    return m ? [m[1], m[2]] : [name, ""];
+  }
+
+  // --- 町名のふりがな ---
+  const kanaMem = {};   // "愛知県|岡崎市" → Promise<{ towns: {町名: 読み}, cityKana }>
+  let kanaStore = {};
+  try { kanaStore = JSON.parse(localStorage.getItem(KANA_CACHE_KEY) || "{}") || {}; } catch (_) {}
+
+  function loadCityKana(pref, city) {
+    const key = pref + "|" + city;
+    if (kanaMem[key]) return kanaMem[key];
+    if (kanaStore[key]) return (kanaMem[key] = Promise.resolve(kanaStore[key]));
+    const url = `${KANA_API}?method=getTowns&prefecture=${encodeURIComponent(pref)}&city=${encodeURIComponent(city)}`;
+    kanaMem[key] = fetch(url).then(r => r.json()).then(j => {
+      const locs = (j.response && j.response.location) || [];
+      const towns = {};
+      let cityKana = "";
+      for (const l of locs) {
+        if (l.town && l.town_kana && !towns[l.town]) towns[l.town] = l.town_kana;
+        // 「額田郡幸田町」のように郡名付きの読みは使わない
+        if (l.city === city && l.city_kana) cityKana = l.city_kana;
+      }
+      const data = { towns, cityKana };
+      if (locs.length) {
+        kanaStore[key] = data;
+        try { localStorage.setItem(KANA_CACHE_KEY, JSON.stringify(kanaStore)); } catch (_) {}
+      } else {
+        delete kanaMem[key];   // 取得できなければ次回再試行
+      }
+      return data;
+    }).catch(() => { delete kanaMem[key]; return { towns: {}, cityKana: "" }; });
+    return kanaMem[key];
+  }
+
+  const prefKanaMem = {};   // "23" → Promise<{ "23202": { c, t } }>
+  function loadLocalKana(muniCd) {
+    const code = String(muniCd).padStart(5, "0");
+    const pc = code.slice(0, 2);
+    if (!prefKanaMem[pc]) {
+      prefKanaMem[pc] = fetch(LOCAL_KANA + pc + ".json")
+        .then(r => (r.ok ? r.json() : {}))
+        .catch(() => { delete prefKanaMem[pc]; return {}; });
+    }
+    return prefKanaMem[pc].then(d => {
+      const e = d[code];
+      return e ? { towns: e.t || {}, cityKana: e.c || "" } : { towns: {}, cityKana: "" };
+    });
+  }
+
+  function findTownKana(towns, town) {
+    if (!town) return "";
+    if (towns[town]) return towns[town];
+    const t = town.replace(/^大字/, "").replace(/^字/, "");
+    if (towns[t]) return towns[t];
+    // 「〇〇町字△△」など：先頭が一致する最長の町名を採用
+    let best = "";
+    for (const name of Object.keys(towns)) {
+      if (t.startsWith(name) && name.length > best.length) best = name;
+    }
+    return best ? towns[best] : "";
+  }
+
+  // 「一丁目」→「いっちょうめ」
+  function chomeKana(chome) {
+    const m = (chome || "").match(/^([0-9０-９一二三四五六七八九十]+)丁目$/);
+    if (!m) return "";
+    const s = m[1].replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0));
+    const d = { 一: 1, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9 };
+    let n;
+    if (/^[0-9]+$/.test(s)) n = parseInt(s, 10);
+    else if (s.includes("十")) { const [a, b] = s.split("十"); n = (a ? d[a] : 1) * 10 + (b ? d[b] : 0); }
+    else n = d[s];
+    if (!n || n > 99) return "";
+    const ones = ["", "いっ", "に", "さん", "よん", "ご", "ろく", "なな", "はっ", "きゅう"];
+    const onesFull = ["", "いち", "に", "さん", "よん", "ご", "ろく", "なな", "はち", "きゅう"];
+    const tens = Math.floor(n / 10), one = n % 10;
+    let r = "";
+    if (tens) r += (tens > 1 ? onesFull[tens] : "") + (one ? "じゅう" : "じゅっ");
+    return r + ones[one] + "ちょうめ";
+  }
+
+  async function showKana(muniCd, pref, city, town, chome, key) {
+    let data = await loadLocalKana(muniCd);
+    let tk = findTownKana(data.towns, town);
+    if (!tk && town) {   // 自前データに無ければ HeartRails で補う
+      const hr = await loadCityKana(pref, city);
+      tk = findTownKana(hr.towns, town);
+      if (!data.cityKana) data = { ...data, cityKana: hr.cityKana };
+    }
+    if (!lastTown || lastTown.key !== key || lastTown.chome !== chome) return;   // 既に移動済み
+    if (town) setWithYomi("town", town, tk);
+    if (chome) setWithYomi("chome", chome, chomeKana(chome));
+    if (data.cityKana) {
+      const span = document.createElement("span");
+      span.className = "ck";
+      span.textContent = "（" + data.cityKana + "）";
+      $("muni").textContent = city + " ";
+      $("muni").append(span);
+    }
+  }
+
+  // 「両町」＋「りょうまち」→ 両町（りょうまち）
+  function setWithYomi(id, text, yomi) {
+    const el = $(id);
+    el.textContent = text;
+    const span = document.createElement("span");
+    span.className = "yomi" + (yomi ? "" : " unknown");
+    span.textContent = yomi ? "（" + yomi + "）" : "（読み不明）";
+    el.append(span);
+  }
+
+  function distM(a, b) {
+    const R = 6371000, r = Math.PI / 180;
+    const dLat = (b.lat - a.lat) * r, dLon = (b.lon - a.lon) * r;
+    const x = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * r) * Math.cos(b.lat * r) * Math.sin(dLon / 2) ** 2;
+    return 2 * R * Math.asin(Math.sqrt(x));
+  }
+
+  async function lookup(force) {
+    if (!latest) return;
+    // ほぼ動いていなければ問い合わせを省略（APIへの負荷軽減）
+    if (!force && lastQueried && distM(lastQueried, latest) < 8) { stamp(); return; }
+    const pos = { ...latest };
+    try {
+      const res = await fetch(`${RGEO}?lat=${pos.lat}&lon=${pos.lon}`, { cache: "no-store" });
+      const json = await res.json();
+      const r = json && json.results;
+      if (!r) { $("town").textContent = "住所なし"; return; }
+      lastQueried = pos;
+      const { pref, city } = muniName(r.muniCd);
+      const lv01 = (r.lv01Nm && r.lv01Nm !== "－") ? r.lv01Nm : "";
+      const [town, chome] = splitChome(lv01);
+
+      // 同じ町・丁目のままなら表示中のふりがなを残す（ちらつき防止）
+      const same = lastTown && lastTown.key === city + town && lastTown.chome === chome;
+      if (!same) {
+        $("muni").textContent = city || NBSP;
+        $("town").textContent = town || "（町名不明）";
+        $("chome").textContent = chome || NBSP;
+      }
+      $("full").textContent = (pref + city + lv01) || " ";
+
+      const key = city + town;
+      if (lastTown && key !== lastTown.key) {
+        history.unshift(lastTown.label);
+        if (history.length > 3) history.pop();
+        if (navigator.vibrate) navigator.vibrate(150);   // 町が変わったら振動
+      }
+      lastTown = { key, chome, label: town || city };
+      if (pref && city) showKana(r.muniCd, pref, city, town, chome, key);
+      $("history").innerHTML = history.length
+        ? "直前：" + history.map(h => `<b>${h}</b>`).join(" ← ") : "";
+      stamp();
+    } catch (e) {
+      $("updated").textContent = "通信エラー（再試行します）";
+    }
+  }
+
+  function stamp() {
+    const d = new Date();
+    $("updated").textContent = "更新 " + d.toLocaleTimeString("ja-JP");
+  }
+
+  function onPos(p) {
+    latest = { lat: p.coords.latitude, lon: p.coords.longitude, acc: p.coords.accuracy };
+    $("gpsDot").classList.add("ok");
+    $("gpsText").textContent = "GPS受信中";
+    $("acc").textContent = "精度 ±" + Math.round(latest.acc) + "m";
+    const ll = [latest.lat, latest.lon];
+    marker.setLatLng(ll);
+    circle.setLatLng(ll).setRadius(latest.acc);
+    if (follow) map.setView(ll, map.getZoom() < 15 ? 16 : map.getZoom(), { animate: false });
+    if (!lastQueried) lookup(true);   // 初回は即時表示
+  }
+
+  function onErr(e) {
+    $("gpsDot").classList.remove("ok");
+    $("gpsText").textContent = e.code === 1 ? "位置情報が許可されていません" : "GPS取得エラー";
+  }
+
+  async function keepAwake() {
+    try {
+      if ("wakeLock" in navigator) wakeLock = await navigator.wakeLock.request("screen");
+    } catch (_) {}
+  }
+
+  function start() {
+    $("start").style.display = "none";
+    if (!navigator.geolocation) { $("town").textContent = "位置情報非対応"; return; }
+    navigator.geolocation.watchPosition(onPos, onErr, {
+      enableHighAccuracy: true, maximumAge: 2000, timeout: 20000
+    });
+    setInterval(() => lookup(false), INTERVAL_MS);
+    keepAwake();
+  }
+
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") { keepAwake(); lookup(true); }
+  });
+
+  $("startBtn").onclick = start;
+  $("nowBtn").onclick = () => { follow = true; lookup(true); };
+  $("mapBtn").onclick = () => {
+    const m = $("map");
+    m.classList.toggle("hidden");
+    $("mapBtn").textContent = m.classList.contains("hidden") ? "地図を表示" : "地図を隠す";
+    if (!m.classList.contains("hidden")) map.invalidateSize();
+  };
+
+  initMap();
+})();
+</script>
+</body>
+</html>

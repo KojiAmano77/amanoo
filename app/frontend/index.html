@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>愛知第12支部活動記録マップ</title>
     <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
-    <link rel="stylesheet" href="/static/css/index.css?v=2">
+    <link rel="stylesheet" href="/static/css/index.css?v=3">
 </head>
 <body>
     <div class="container">
@@ -46,6 +46,15 @@
         </div>
         
         <div id="message-area"></div>
+
+        <!-- 街宣車用：ログイン不要で現在地の町名を表示 -->
+        <a href="/where" class="where-link-card">
+            <span class="where-link-icon">🪧</span>
+            <span>
+                <strong>いまどこ町名</strong><br>
+                <small>現在地の町名を表示（ログイン不要・街宣車用）</small>
+            </span>
+        </a>
     </div>
 
     <script src="/static/js/index.js?v=2"></script>

@@ -223,6 +223,7 @@ async def favicon():
     return FileResponse("frontend/favicon.ico")
 
 templates = Jinja2Templates(directory="frontend")
+frontend_path_where = os.path.join(os.path.dirname(__file__), "frontend")
 
 # 新規アカウント申請（支部長の承認制）
 # 申請 → 支部長にメール通知 → 確認ページで承認 → 申請者にID・パスワードをメール通知
@@ -230,8 +231,7 @@ MAX_PENDING_ACCOUNT_REQUESTS = 30  # いたずらで承認者にメールが大�
 
 
 def _account_request_page(request: Request, state: str, account_request=None, detail: str = ""):
-    return templates.TemplateResponse("account-request.html", {
-        "request": request,
+    return templates.TemplateResponse(request, "account-request.html", {
         "state": state,
         "account_request": account_request,
         "detail": detail,
@@ -375,12 +375,12 @@ async def reject_account_request(request: Request, token: str, db: Session = Dep
 # ログインページ表示
 @app.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request})
+    return templates.TemplateResponse(request, "index.html")
 
 # パスワードリセットページ表示
 @app.get("/reset-password", response_class=HTMLResponse)
 async def reset_password_page(request: Request, token: str = None):
-    return templates.TemplateResponse("reset-password.html", {"request": request, "token": token})
+    return templates.TemplateResponse(request, "reset-password.html", {"token": token})
 
 # ログイン
 # ログインの有効期間。年配の利用者が多く頻繁な再ログインは負担になるため長めにしている。
@@ -1062,15 +1062,20 @@ async def admin_update_activity(
 # メインページ
 @app.get("/", response_class=HTMLResponse)
 async def root(request: Request):
-    return templates.TemplateResponse("activity.html", {"request": request})
+    return templates.TemplateResponse(request, "activity.html")
 
 @app.get("/activity", response_class=HTMLResponse)
 async def activity_page(request: Request):
-    return templates.TemplateResponse("activity.html", {"request": request})
+    return templates.TemplateResponse(request, "activity.html")
 
 @app.get("/calendar", response_class=HTMLResponse)
 async def calendar_page(request: Request):
-    return templates.TemplateResponse("calendar.html", {"request": request})
+    return templates.TemplateResponse(request, "calendar.html")
+
+# 現在地の町名表示（街宣車用）：ログイン不要で公開
+@app.get("/where")
+async def where_page():
+    return FileResponse(os.path.join(frontend_path_where, "where.html"))
 
 # --- Calendar Event Endpoints ---
 @app.get("/events", response_model=List[EventSchema])

@@ -137,3 +137,21 @@ button.secondary-btn {
 button.secondary-btn:hover {
     background-color: #757575;
 }
+
+/* いまどこ町名へのリンク（ログイン不要） */
+.where-link-card {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    max-width: 420px;
+    margin: 24px auto 0;
+    padding: 14px 18px;
+    border: 2px solid #2E7D32;
+    border-radius: 12px;
+    background: #fff;
+    color: #2E7D32;
+    text-decoration: none;
+}
+.where-link-card:hover { background: #f1f8e9; }
+.where-link-icon { font-size: 2rem; }
+.where-link-card small { color: #555; }
