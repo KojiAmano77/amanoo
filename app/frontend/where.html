@@ -5,6 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#111827">
 <title>いまどこ町名</title>
+<!-- ホーム画面に追加したときのアイコン・名前 -->
+<link rel="icon" type="image/png" sizes="192x192" href="/static/icons/where-192.png">
+<link rel="apple-touch-icon" sizes="180x180" href="/static/icons/where-180.png">
+<link rel="manifest" href="/static/where-manifest.json">
+<meta name="apple-mobile-web-app-title" content="いまどこ町名">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <style>
   :root {
@@ -15,8 +23,8 @@
   html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg);
     font-family: "Hiragino Sans", "Noto Sans JP", "Meiryo", sans-serif; }
   body { display: flex; flex-direction: column; }
-  #top { padding: 16px 16px 8px; text-align: center; }
-  #muni { font-size: 1.4rem; color: var(--sub); min-height: 1.6em; }
+  #top { padding: calc(16px + env(safe-area-inset-top)) 16px 8px; text-align: center; }
+  #muni { font-size: 1.4rem; color: var(--fg); min-height: 1.6em; }
   #town { font-size: clamp(3rem, 16vw, 7rem); font-weight: 800; color: var(--accent);
     line-height: 1.15; word-break: keep-all; overflow-wrap: anywhere; min-height: 1.2em; }
   #chome { font-size: 2rem; font-weight: 700; min-height: 1.3em; }
@@ -25,13 +33,15 @@
     vertical-align: middle; letter-spacing: .02em; }
   #chome .yomi { font-size: .8em; }
   .yomi.unknown { color: var(--sub); font-weight: 600; }
-  #muni .ck { color: var(--sub); font-weight: 600; }
-  #full { font-size: 1rem; color: var(--sub); margin-top: 4px; }
+  #muni .ck { color: var(--fg); font-weight: 600; }
+  #full { font-size: 1rem; color: var(--fg); margin-top: 4px; }
   #status { display: flex; justify-content: center; gap: 12px; font-size: .9rem; color: var(--sub);
     padding: 4px 16px 8px; flex-wrap: wrap; }
   .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--warn);
     margin-right: 4px; vertical-align: middle; }
   .dot.ok { background: var(--ok); }
+  #intervalSel { font-size: .9rem; font-family: inherit; color: var(--fg); background: var(--card);
+    border: 1px solid #374151; border-radius: 6px; padding: 2px 4px; }
   #history { padding: 0 16px 8px; font-size: 1rem; color: var(--sub); text-align: center; min-height: 1.4em; }
   #history b { color: var(--fg); font-weight: 600; }
   #map { flex: 1; min-height: 200px; }
@@ -52,7 +62,7 @@
 
 <div id="start">
   <div style="font-size:1.6rem;font-weight:800">いまどこ町名</div>
-  <p>5秒ごとに現在地の町名を表示します。<br>位置情報の利用を「許可」してください。</p>
+  <p>一定間隔（最初は5秒ごと）で現在地の町名を表示します。<br>位置情報の利用を「許可」してください。</p>
   <button id="startBtn">開始</button>
 </div>
 
@@ -66,6 +76,16 @@
   <span><span id="gpsDot" class="dot"></span><span id="gpsText">GPS待機</span></span>
   <span id="acc"></span>
   <span id="updated"></span>
+  <label>更新間隔
+    <select id="intervalSel">
+      <option value="3">3秒</option>
+      <option value="5">5秒</option>
+      <option value="10">10秒</option>
+      <option value="15">15秒</option>
+      <option value="30">30秒</option>
+      <option value="60">60秒</option>
+    </select>
+  </label>
 </div>
 <div id="history"></div>
 <div id="map"></div>
@@ -80,7 +100,15 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script>
 (() => {
-  const INTERVAL_MS = 5000;
+  // 自動更新の間隔（秒）。初期値5秒、画面の「更新間隔」で変更でき、端末に保存される
+  const DEFAULT_INTERVAL_SEC = 5;
+  const INTERVAL_KEY = "where-interval-sec";
+  let intervalSec = DEFAULT_INTERVAL_SEC;
+  try {
+    const v = parseInt(localStorage.getItem(INTERVAL_KEY), 10);
+    if ([3, 5, 10, 15, 30, 60].includes(v)) intervalSec = v;
+  } catch (_) {}
+  let timer = null;
   const RGEO = "https://mreversegeocoder.gsi.go.jp/reverse-geocoder/LonLatToAddress";
   // 町名の読み：①自前データ（日本郵便の郵便番号データから作成 /static/kana/NN.json）
   //            ②見つからなければ HeartRails Geo API（無料・キー不要）
@@ -173,7 +201,7 @@
   function findTownKana(towns, town) {
     if (!town) return "";
     if (towns[town]) return towns[town];
-    const t = town.replace(/^大字/, "").replace(/^字/, "");
+    const t = town.replace(/^(大字|小字|字)/, "");
     if (towns[t]) return towns[t];
     // 「〇〇町字△△」など：先頭が一致する最長の町名を採用
     let best = "";
@@ -252,7 +280,9 @@
       lastQueried = pos;
       const { pref, city } = muniName(r.muniCd);
       const lv01 = (r.lv01Nm && r.lv01Nm !== "－") ? r.lv01Nm : "";
-      const [town, chome] = splitChome(lv01);
+      // 正式な住所にだけ付く「大字」「小字」「字」は呼びかけに使わないので外す（下の住所行には残す）
+      let [town, chome] = splitChome(lv01);
+      town = town.replace(/^(大字|小字|字)/, "");
 
       // 同じ町・丁目のままなら表示中のふりがなを残す（ちらつき防止）
       const same = lastTown && lastTown.key === city + town && lastTown.chome === chome;
@@ -313,9 +343,21 @@
     navigator.geolocation.watchPosition(onPos, onErr, {
       enableHighAccuracy: true, maximumAge: 2000, timeout: 20000
     });
-    setInterval(() => lookup(false), INTERVAL_MS);
+    restartTimer();
     keepAwake();
   }
+
+  function restartTimer() {
+    if (timer) clearInterval(timer);
+    timer = setInterval(() => lookup(false), intervalSec * 1000);
+  }
+
+  $("intervalSel").value = String(intervalSec);
+  $("intervalSel").onchange = e => {
+    intervalSec = parseInt(e.target.value, 10) || DEFAULT_INTERVAL_SEC;
+    try { localStorage.setItem(INTERVAL_KEY, String(intervalSec)); } catch (_) {}
+    if (timer) { restartTimer(); lookup(true); }
+  };
 
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible") { keepAwake(); lookup(true); }

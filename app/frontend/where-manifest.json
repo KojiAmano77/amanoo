@@ -1,0 +1,15 @@
+{
+  "name": "いまどこ町名",
+  "short_name": "いまどこ町名",
+  "description": "現在地の町名とふりがなを一定間隔（初期5秒）で表示",
+  "start_url": "/where",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#111827",
+  "theme_color": "#111827",
+  "lang": "ja",
+  "icons": [
+    { "src": "/static/icons/where-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/static/icons/where-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

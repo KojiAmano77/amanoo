@@ -35,6 +35,19 @@ def clean(name: str) -> str:
     return name.strip()
 
 
+COUNTY_RE = re.compile(r"^.+?郡(.+[町村])$")
+
+
+def city_reading(city: str, city_kana: str) -> str:
+    """「知多郡武豊町」「チタグンタケトヨチョウ」→「タケトヨチョウ」。
+    郡名の読みは最後の「グン」までとみなす（北群馬郡＝キタグンマグン にも対応）。
+    小郡市・郡山市など、市名に「郡」を含むだけのものは対象外。"""
+    if not COUNTY_RE.match(city):
+        return city_kana
+    i = city_kana.rfind("グン")
+    return city_kana[i + 2:] if i >= 0 else ""
+
+
 def main(zip_path: str) -> None:
     with zipfile.ZipFile(zip_path) as zf:
         csv_name = next(n for n in zf.namelist() if n.lower().endswith(".csv"))
@@ -47,9 +60,8 @@ def main(zip_path: str) -> None:
             town = ""
         code = code.zfill(5)
         entry = prefs.setdefault(code[:2], {}).setdefault(code, {"c": "", "t": {}})
-        # 郡名付き（例: 額田郡幸田町）は町村名だけの読みに分けられないので入れない
-        if not entry["c"] and "郡" not in city:
-            entry["c"] = kata_to_hira(city_kana)
+        if not entry["c"]:
+            entry["c"] = kata_to_hira(city_reading(city, city_kana))
         t, tk = clean(town), clean(town_kana)
         if t and tk and t not in entry["t"]:
             entry["t"][t] = kata_to_hira(tk)
