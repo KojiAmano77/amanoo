@@ -8,9 +8,8 @@
     "deny": [
         "Edit(data/**)",
         "Read(.env)",
-        "Edit(.claude/**)",
+        "Edit(/.claude/**)",
         "Bash(git*)"
     ]
-  },
-  "defaultMode": "claude-sonnet-4-6"
+  }
 }
