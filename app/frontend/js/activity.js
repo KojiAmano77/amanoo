@@ -182,6 +182,8 @@ function toggleMapFullscreen() {
     btn.innerHTML = isFullscreen ? '✕' : '⛶';
     btn.title = isFullscreen ? '全画面を終了' : '全画面表示';
     map.invalidateSize();
+    // 歩行ログ記録ボタン（route-recorder.js）の表示切り替え用
+    document.dispatchEvent(new CustomEvent('mapfullscreenchange', { detail: { isFullscreen } }));
 }
 
 // 地図初期化

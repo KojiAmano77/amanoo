@@ -8,7 +8,7 @@ const CHATWORK_API_BASE = "https://api.chatwork.com/v2/rooms";
 // （初回のみ setupScriptProperties() を実行して設定。詳細は同関数のコメント参照）
 const scriptProps = PropertiesService.getScriptProperties();
 const CHATWORK_TOKEN = scriptProps.getProperty('CHATWORK_TOKEN'); // 自動投稿APIトークン
-const GEOAPIFY_API_KEY = scriptProps.getProperty('GEOAPIFY_API_KEY'); // 軌跡地図画像生成用（Geoapify Static Maps API）
+const GEOAPIFY_API_KEY = 52689f804fa54a408e04252b89d0012d;
 
 // 画像リサイズ用（Cloudinary、unsigned upload preset方式）
 // Chatworkが大きすぎる画像のサムネイル生成に失敗する問題への対策。

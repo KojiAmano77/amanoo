@@ -18,6 +18,11 @@ import xml.etree.ElementTree as ET
 from database import get_db, create_tables, User, Activity, PasswordResetToken, Event, AccountRequest
 from auth import get_password_hash, verify_password, create_access_token, get_current_user, password_fingerprint
 from email_validator import validate_email, EmailNotValidError
+from fastapi.concurrency import run_in_threadpool
+import chatwork_service
+from posting_report import (
+    PostingReport, build_message, build_memo, build_gpx, clean_segments, lonlat_only, parse_date,
+)
 from email_service import (
     send_password_reset_email, send_password_changed_email, send_new_account_email,
     send_account_request_email, APPROVER_EMAILS, ADMIN_EMAIL, SITE_URL,
@@ -680,6 +685,106 @@ async def create_activity_from_form_api(
         "user_id": user.username,
         "gpx_saved": bool(gpx_content),
         "gpx_filename": gpx_filename,
+    }
+
+
+# ---- 活動記録マップからのポスティング報告（ルートヒストリー＋Googleフォームの置き換え） ----
+MAX_REPORT_PHOTOS = 10
+MAX_REPORT_PHOTO_BYTES = 5 * 1024 * 1024
+
+
+def _parse_posting_report(raw: str) -> PostingReport:
+    try:
+        report = PostingReport.model_validate_json(raw)
+        parse_date(report.date)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="報告内容の形式が正しくありません") from exc
+    return report
+
+
+@app.post("/api/reports/posting/preview")
+async def preview_posting_report(
+    report: PostingReport,
+    current_user: User = Depends(get_current_user),
+):
+    """投稿前の確認用。実際の投稿と同じ関数で本文を組み立てて返す"""
+    try:
+        parse_date(report.date)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="日付の形式が正しくありません") from exc
+    return {"message": build_message(report, current_user.username)}
+
+
+@app.post("/api/reports/posting", status_code=status.HTTP_201_CREATED)
+async def create_posting_report(
+    report: str = Form(...),
+    photos: List[UploadFile] = File(default=[]),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """歩行ログ付きのポスティング報告を登録し、Chatworkに投稿する。
+    Chatworkへの投稿に失敗しても、活動記録の登録は成功として扱う（結果はレスポンスで返す）"""
+    if current_user.is_readonly:
+        raise HTTPException(status_code=403, detail="閲覧専用アカウントのため報告はできません")
+
+    data = _parse_posting_report(report)
+    segments = clean_segments(data.segments)
+    if not segments:
+        raise HTTPException(status_code=400, detail="歩行ログ（ルート）がありません")
+    if not data.area.strip():
+        raise HTTPException(status_code=400, detail="ポスティングエリアを入力してください")
+    if len(photos) > MAX_REPORT_PHOTOS:
+        raise HTTPException(status_code=400, detail=f"写真は{MAX_REPORT_PHOTOS}枚までです")
+
+    images = []
+    for i, photo in enumerate(photos, start=1):
+        content = await photo.read()
+        if not content:
+            continue
+        if len(content) > MAX_REPORT_PHOTO_BYTES:
+            raise HTTPException(status_code=400, detail="写真のサイズが大きすぎます")
+        if not (photo.content_type or "").startswith("image/"):
+            raise HTTPException(status_code=400, detail="写真以外のファイルは添付できません")
+        images.append((f"photo{i}.jpg", content))
+
+    # 1. 活動記録として保存
+    track_segments = lonlat_only(segments)
+    track_geojson = _build_track_geojson(track_segments)
+    activity_date = parse_date(data.date)
+    db_activity = Activity(
+        user_id=current_user.id,
+        activity_type="ポスティング",
+        location=data.area.strip()[:255],
+        location_name=None,
+        latitude=track_segments[0][0][1],
+        longitude=track_segments[0][0][0],
+        polygon_coordinates=json.dumps(track_geojson),
+        gpx_content=build_gpx(segments, f"{data.date} {current_user.username} {data.area.strip()}"),
+        date=activity_date,
+        memo=build_memo(data),
+        distance_km=_geometry_distance_km(track_geojson["geometry"]),
+    )
+    db.add(db_activity)
+    db.commit()
+    db.refresh(db_activity)
+
+    # 2. 軌跡画像を作り、写真の後ろに付けてChatworkに投稿（GASと同じ順番）
+    message = build_message(data, current_user.username)
+    map_image = await run_in_threadpool(chatwork_service.generate_track_map_image, track_segments)
+    if map_image:
+        images.append(("routeMap.jpg", map_image))
+    try:
+        chatwork_result = await run_in_threadpool(chatwork_service.post_report, message, images)
+    except Exception as e:
+        print(f"Chatwork投稿エラー: {e}")
+        chatwork_result = {"posted": False, "images_posted": 0, "skipped_reason": "投稿中にエラーが発生しました"}
+
+    return {
+        "message": "活動記録を登録しました",
+        "activity_id": db_activity.id,
+        "distance_km": db_activity.distance_km,
+        "map_image": bool(map_image),
+        "chatwork": chatwork_result,
     }
 
 
