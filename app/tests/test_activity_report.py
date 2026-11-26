@@ -184,6 +184,29 @@ class ChatworkServiceTests(unittest.TestCase):
         self.assertIsNotNone(result["skipped_reason"])
 
 
+class TrackMapImageTests(unittest.TestCase):
+    def setUp(self):
+        p = patch.object(chatwork_service, "GEOAPIFY_API_KEY", "key")
+        p.start()
+        self.addCleanup(p.stop)
+
+    def test_retries_once_after_timeout(self):
+        with patch.object(chatwork_service, "_request",
+                          side_effect=[TimeoutError("The read operation timed out"), (200, b"jpeg")]) as req:
+            self.assertEqual(chatwork_service.generate_track_map_image(SEGMENTS), b"jpeg")
+        self.assertEqual([c.kwargs["timeout"] for c in req.call_args_list], list(chatwork_service.MAP_TIMEOUTS_SEC))
+
+    def test_gives_up_after_all_timeouts(self):
+        with patch.object(chatwork_service, "_request", side_effect=TimeoutError("timed out")) as req:
+            self.assertIsNone(chatwork_service.generate_track_map_image(SEGMENTS))
+        self.assertEqual(req.call_count, len(chatwork_service.MAP_TIMEOUTS_SEC))
+
+    def test_does_not_retry_bad_key(self):
+        with patch.object(chatwork_service, "_request", return_value=(401, b"Invalid apiKey")) as req:
+            self.assertIsNone(chatwork_service.generate_track_map_image(SEGMENTS))
+        self.assertEqual(req.call_count, 1)
+
+
 class SheetServiceTests(unittest.TestCase):
     def test_row_values_use_form_question_titles(self):
         values = sheet_service.build_row_values(ActivityReport(**report_dict()), "天野")

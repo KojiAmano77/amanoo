@@ -37,6 +37,9 @@ RETRY_WAIT_SEC = 11        # 投稿制限(429)に当たった際の再試行ま�
 MAX_ATTEMPTS = 3
 HTTP_TIMEOUT_SEC = 30
 MAX_MAP_POINTS = 1000      # 軌跡画像に使う点数の上限（多い場合は間引く）
+# 軌跡画像の待ち時間（秒）。ふだんは3〜8秒で返るが、Geoapify側がまれに30秒以上止まることがある。
+# 1回目で返らなければ、もう一度だけ頼み直す（nginx の proxy_read_timeout 内に収まる合計にする）
+MAP_TIMEOUTS_SEC = (30, 45)
 
 Image = Tuple[str, bytes]  # (ファイル名, JPEGバイト列)
 
@@ -46,10 +49,10 @@ def _sleep(seconds: float):
     time.sleep(seconds)
 
 
-def _request(url: str, data: Optional[bytes], headers: dict) -> Tuple[int, bytes]:
+def _request(url: str, data: Optional[bytes], headers: dict, timeout: Optional[float] = None) -> Tuple[int, bytes]:
     req = urllib.request.Request(url, data=data, headers=headers, method="POST")
     try:
-        with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT_SEC) as res:
+        with urllib.request.urlopen(req, timeout=timeout or HTTP_TIMEOUT_SEC) as res:
             return res.status, res.read()
     except urllib.error.HTTPError as e:
         return e.code, e.read()
@@ -83,19 +86,26 @@ def generate_track_map_image(segments: List[List[List[float]]]) -> Optional[byte
             for seg in sampled
         ],
     }
-    try:
-        status, body = _request(
-            f"https://maps.geoapify.com/v1/staticmap?apiKey={GEOAPIFY_API_KEY}",
-            json.dumps(payload).encode("utf-8"),
-            {"Content-Type": "application/json"},
-        )
-    except Exception as e:
-        print(f"軌跡地図生成エラー: {e}")
-        return None
-    if status != 200:
-        print(f"軌跡地図生成エラー: HTTP {status} {body[:200]!r}")
-        return None
-    return body
+    data = json.dumps(payload).encode("utf-8")
+    for attempt, timeout in enumerate(MAP_TIMEOUTS_SEC, start=1):
+        started = time.time()
+        try:
+            status, body = _request(
+                f"https://maps.geoapify.com/v1/staticmap?apiKey={GEOAPIFY_API_KEY}",
+                data, {"Content-Type": "application/json"}, timeout=timeout,
+            )
+        except Exception as e:
+            # 応答待ちの打ち切り・接続エラーは、Geoapify側の一時的な不調のことが多いので頼み直す
+            print(f"軌跡地図生成エラー（{attempt}回目・{time.time() - started:.0f}秒）: {e}")
+            continue
+        if status == 200:
+            if attempt > 1:
+                print(f"軌跡地図生成: {attempt}回目で成功（{time.time() - started:.0f}秒）")
+            return body
+        print(f"軌跡地図生成エラー（{attempt}回目）: HTTP {status} {body[:200]!r}")
+        if status < 500 and status != 429:
+            return None  # キーの誤り・内容の誤りは頼み直しても同じなのでやめる
+    return None
 
 
 def _multipart(fields: dict, file_name: str, file_bytes: bytes) -> Tuple[bytes, str]:

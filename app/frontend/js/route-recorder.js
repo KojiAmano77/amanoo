@@ -11,7 +11,8 @@
     const STORAGE_KEY = 'routeRecorder.v1';
     const MAX_ACCURACY_M = 30;      // これより精度が悪い点は捨てる
     const MIN_MOVE_M = 3;           // 前の点からこれ未満しか動いていない点は捨てる
-    const MAX_SPEED_MPS = 30 / 3.6; // 時速30km超の飛びは捨てる
+    // これより速い移動はGPSの位置飛びとして捨てる（街宣車の走行は記録できるよう、車でもありえない速さにしている）
+    const MAX_SPEED_MPS = 200 / 3.6;
     const GAP_NEW_SEGMENT_MS = 60 * 1000; // これ以上間が空いたら新しいセグメントにする
     const SAVE_INTERVAL_MS = 5000;
     const MAX_PHOTOS = 10;
@@ -710,7 +711,8 @@
             const shText = sh.saved
                 ? 'スプレッドシートに記録しました'
                 : `※スプレッドシートには記録できませんでした${sh.skipped_reason ? '：' + sh.skipped_reason : ''}`;
-            alert(`活動記録を登録しました（${data.distance_km ?? '-'}km）\n${cwText}\n${shText}`);
+            const mapText = data.map_image ? '' : '\n※ルート地図の画像は作れなかったため、画像なしで投稿しました';
+            alert(`活動記録を登録しました（${data.distance_km ?? '-'}km）\n${cwText}${mapText}\n${shText}`);
 
             closeModal();
             reportPhotos.forEach(p => URL.revokeObjectURL(p.url));
