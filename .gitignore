@@ -26,3 +26,6 @@ certbot/conf/csr/
 .DS_Store
 .vscode/
 .idea/
+# 秘密の値が入っている古いGASの控え・ログ（コミットしない）
+app/tests/変更前GAS.gs
+ssl-renew.log
