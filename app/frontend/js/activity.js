@@ -557,7 +557,7 @@ async function getCurrentUser() {
                 adminTab.classList.toggle('hidden', !currentUserIsAdmin);
             }
 
-            // 閲覧専用アカウントの場合は記録操作UIを無効化
+            // 削除不可アカウントの場合は案内を出す（削除ボタンは各一覧の側で出さない）
             if (currentUserIsReadonly) {
                 applyReadonlyUI();
             }
@@ -905,28 +905,17 @@ async function loadTeamActivities() {
 }
 
 
-// 閲覧専用UIの適用（記録・削除ボタン等を非表示にする）
+// 削除不可モードの表示（＝DBの is_readonly。以前の「閲覧専用」）
+// 削除不可アカウントは、記録の登録と自分の記録の編集はできるが、削除はできない
+// （他人の記録の編集・削除は、削除不可でない一般アカウントと同じくできない）。
+// 削除ボタンは各一覧・ポップアップの側で出さないようにしている
 function applyReadonlyUI() {
-    // 地図タブの記録フォーム・操作ボタンを非表示
-    const form = document.getElementById('activity-form');
-    if (form) form.style.display = 'none';
-
-    const submitBtn = document.querySelector('.submit-btn');
-    if (submitBtn) submitBtn.style.display = 'none';
-
-    // GPX・ピン・描画ボタンを非表示
-    ['gpx-upload-btn', 'gpx-file-input', 'gpx-clear-btn', 'pin-mode-btn', 'pin-clear-btn'].forEach(id => {
-        const el = document.getElementById(id);
-        if (el) el.style.display = 'none';
-    });
-    document.querySelectorAll('.gpx-upload-btn, .gpx-clear-btn').forEach(el => el.style.display = 'none');
-
-    // 閲覧専用バナーを表示
+    // 削除不可バナーを表示
     const mapView = document.getElementById('map-view');
     if (mapView) {
         const banner = document.createElement('div');
         banner.className = 'readonly-banner';
-        banner.textContent = '👁 閲覧専用モード：記録の登録・削除はできません';
+        banner.textContent = '🚫 削除不可モード：記録の登録と自分の記録の編集はできますが、削除はできません';
         mapView.insertBefore(banner, mapView.firstChild);
     }
 }
@@ -1033,16 +1022,16 @@ function displayAdminUsers(users) {
 
     users.forEach(user => {
         const adminBtnText    = user.is_admin    ? '管理者解除' : '管理者付与';
-        const readonlyBtnText = user.is_readonly ? '専用解除'   : '閲覧専用付与';
+        const readonlyBtnText = user.is_readonly ? '削除不可解除' : '削除不可付与';
         const editorBtnText   = user.is_editor   ? '編集者解除' : '編集者付与';
         const editorBadge   = user.is_editor   ? '<span class="editor-badge">記録編集者</span>' : '';
-        // 管理者は記録編集者の権限を含む／閲覧専用とは両立しない
+        // 管理者は記録編集者の権限を含む／削除不可とは両立しない
         const editorDisabledReason = user.is_admin ? '管理者は記録編集者の権限を含んでいます'
-                                   : user.is_readonly ? '閲覧専用を解除してから付与してください' : '';
+                                   : user.is_readonly ? '削除不可を解除してから付与してください' : '';
         const editorDisabled = editorDisabledReason ? `disabled title="${editorDisabledReason}"` : '';
         const adminBadge    = user.is_admin    ? '<span class="admin-badge">管理者</span>'      : '';
-        const readonlyBadge = user.is_readonly ? '<span class="readonly-badge">閲覧専用</span>' : '';
-        const readonlyDisabled = user.is_admin ? 'disabled title="管理者は閲覧専用にできません"' : '';
+        const readonlyBadge = user.is_readonly ? '<span class="readonly-badge">削除不可</span>' : '';
+        const readonlyDisabled = user.is_admin ? 'disabled title="管理者は削除不可にできません"' : '';
         const createdAt = user.created_at ? new Date(user.created_at).toLocaleDateString('ja-JP') : '';
         const updatedAt = user.updated_at ? new Date(user.updated_at).toLocaleDateString('ja-JP') : '—';
         const userJson  = JSON.stringify(user).replace(/'/g, '&#39;');
@@ -1094,7 +1083,7 @@ function displayAdminUsers(users) {
         readonlyBtn.onclick = () => toggleReadonlyUser(user.id);
         if (user.is_admin) {
             readonlyBtn.disabled = true;
-            readonlyBtn.title = '管理者は閲覧専用にできません';
+            readonlyBtn.title = '管理者は削除不可にできません';
         }
 
         const editorBtn = document.createElement('button');
@@ -1163,7 +1152,7 @@ function closeUserModal() {
 }
 
 // 権限の組み合わせを UI 上で反映
-//   管理者は記録編集者の権限を含む（編集者のチェックは不要）／閲覧専用は管理者・記録編集者と両立しない
+//   管理者は記録編集者の権限を含む（編集者のチェックは不要）／削除不可は管理者・記録編集者と両立しない
 function onPermissionChange(changed) {
     const adminChk    = document.getElementById('user-modal-is-admin');
     const readonlyChk = document.getElementById('user-modal-is-readonly');
@@ -1281,7 +1270,7 @@ window.toggleReadonlyUser = async function(userId) {
     try {
         const response = await fetchWithAuth(`/admin/users/${userId}/toggle-readonly`, { method: 'POST' });
         if (response.ok) {
-            showMessage('閲覧専用設定を更新しました', 'success');
+            showMessage('削除不可設定を更新しました', 'success');
             loadAdminUsers();
         } else {
             const result = await response.json().catch(() => ({}));
@@ -1326,7 +1315,7 @@ function displayMyActivities(activities) {
         deleteBtn.onclick = () => deleteActivity(activity.id);
         
         editCell.appendChild(editBtn);
-        editCell.appendChild(deleteBtn);
+        if (!currentUserIsReadonly) editCell.appendChild(deleteBtn);
         
         const distanceText = activity.distance_km != null ? `${activity.distance_km.toFixed(2)} km` : '-';
         row.innerHTML = `
@@ -1370,7 +1359,7 @@ function displayMyActivities(activities) {
             cardActions.appendChild(colorTd);
         }
         cardActions.appendChild(cardEditBtn);
-        cardActions.appendChild(cardDeleteBtn);
+        if (!currentUserIsReadonly) cardActions.appendChild(cardDeleteBtn);
 
         card.appendChild(cardContent);
         card.appendChild(cardActions);
@@ -1899,6 +1888,12 @@ function handleGpxUpload(event) {
             }
             drawGpxTrack(points);
             showMessage(`GPXファイルを読み込みました（${points.length.toLocaleString()}ポイント）`, 'success');
+            // 活動報告（ポスティング・街宣車活動。Chatwork投稿・スプレッドシート記録つき）の入力画面を開く。
+            // 「戻る」で閉じれば、これまでどおり地図タブのフォームから登録できる
+            if (typeof window.openActivityReportFromGpx === 'function') {
+                const segments = parseGpxSegments(e.target.result);
+                if (segments.length) window.openActivityReportFromGpx(segments, file.name);
+            }
         } catch (err) {
             showMessage('GPXファイルの読み込みに失敗しました', 'error');
         }
@@ -1925,6 +1920,29 @@ function parseGpxFile(xmlContent) {
     });
 
     return points;
+}
+
+// 報告用に、GPXを [[[経度, 緯度, 時刻(ミリ秒)], ...], ...]（trksegごと）に変換する。
+// 時刻がない点は経度・緯度だけにする
+function parseGpxSegments(xmlContent) {
+    const doc = new DOMParser().parseFromString(xmlContent, 'application/xml');
+    if (doc.querySelector('parsererror')) return [];
+    const segments = [];
+    const segEls = doc.querySelectorAll('trkseg');
+    const groups = segEls.length ? Array.from(segEls) : [doc];
+    groups.forEach(seg => {
+        const pts = [];
+        seg.querySelectorAll('trkpt').forEach(pt => {
+            const lat = parseFloat(pt.getAttribute('lat'));
+            const lon = parseFloat(pt.getAttribute('lon'));
+            if (isNaN(lat) || isNaN(lon)) return;
+            const timeEl = pt.querySelector('time');
+            const t = timeEl ? Date.parse(timeEl.textContent.trim()) : NaN;
+            pts.push(isNaN(t) ? [lon, lat] : [lon, lat, t]);
+        });
+        if (pts.length >= 2) segments.push(pts);
+    });
+    return segments;
 }
 
 function drawGpxTrack(points) {

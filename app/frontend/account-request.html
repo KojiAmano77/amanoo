@@ -40,7 +40,7 @@
                 {% endif %}
 
                 {% if account_request and account_request.status == "pending" %}
-                    <p class="form-note">承認すると、閲覧専用のアカウントが発行され、申請者にログインIDとパスワードがメールで届きます。</p>
+                    <p class="form-note">承認すると、削除不可のアカウント（記録の登録と自分の記録の編集はできるが、削除はできない）が発行され、申請者にログインIDとパスワードがメールで届きます。</p>
                     <form method="post" action="/account-requests/{{ account_request.token }}/approve">
                         <button type="submit">承認する</button>
                     </form>

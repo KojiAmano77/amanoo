@@ -434,7 +434,7 @@ button:active {
     vertical-align: middle;
 }
 
-/* 閲覧専用トグルボタン */
+/* 削除不可トグルボタン */
 .readonly-toggle-btn {
     background-color: #6c757d;
     color: white;
@@ -460,7 +460,7 @@ button:active {
     opacity: 0.6;
 }
 
-/* 閲覧専用バッジ（ユーザー名の横） */
+/* 削除不可バッジ（ユーザー名の横） */
 .readonly-badge {
     display: inline-block;
     background: #fff3cd;
@@ -473,7 +473,7 @@ button:active {
     vertical-align: middle;
 }
 
-/* 閲覧専用バナー（地図タブ上部） */
+/* 削除不可バナー（地図タブ上部） */
 .readonly-banner {
     background: #fff3cd;
     color: #856404;
@@ -1325,6 +1325,10 @@ button:active {
 .rr-bill label { flex: 1; font-weight: normal; font-size: 14px; }
 .rr-bill input { width: 90px !important; flex: none; }
 .rr-photo-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.rr-types { display: flex; flex-wrap: wrap; gap: 4px 16px; }
+.rr-rooms { display: flex; flex-direction: column; gap: 6px; }
+.rr-room { display: flex; align-items: center; gap: 8px; font-weight: normal; padding: 6px 4px; cursor: pointer; }
+.rr-room input { width: 20px; height: 20px; margin: 0; flex: none; }
 .rr-photo { position: relative; }
 .rr-photo img { width: 72px; height: 72px; object-fit: cover; border-radius: 6px; }
 .rr-photo button {

@@ -20,8 +20,9 @@ from auth import get_password_hash, verify_password, create_access_token, get_cu
 from email_validator import validate_email, EmailNotValidError
 from fastapi.concurrency import run_in_threadpool
 import chatwork_service
-from posting_report import (
-    PostingReport, build_message, build_memo, build_gpx, clean_segments, lonlat_only, parse_date,
+import sheet_service
+from activity_report import (
+    REPORT_ACTIVITY_TYPES, ActivityReport, build_message, build_memo, build_gpx, clean_segments, lonlat_only, parse_date,
 )
 from email_service import (
     send_password_reset_email, send_password_changed_email, send_new_account_email,
@@ -560,7 +561,7 @@ async def register_user_from_form(
 
     existing = db.query(User).filter(User.username == username).first()
     if existing:
-        # メールアドレス未登録の閲覧専用アカウント（フォームのメール欄が無かった期間に
+        # メールアドレス未登録の削除不可アカウント（フォームのメール欄が無かった期間に
         # GPX投稿から自動作成されたもの等）は、パスワードを誰も知らずログインできないため、
         # 入力されたメールアドレスを紐づけてパスワードを発行し直し、通知して救済する
         if email and not existing.email and existing.is_readonly:
@@ -688,23 +689,35 @@ async def create_activity_from_form_api(
     }
 
 
-# ---- 活動記録マップからのポスティング報告（ルートヒストリー＋Googleフォームの置き換え） ----
+# ---- 活動記録マップからの歩行ログ付き活動報告（ルートヒストリー＋Googleフォームの置き換え） ----
 MAX_REPORT_PHOTOS = 10
 MAX_REPORT_PHOTO_BYTES = 5 * 1024 * 1024
 
 
-def _parse_posting_report(raw: str) -> PostingReport:
+def _parse_activity_report(raw: str) -> ActivityReport:
     try:
-        report = PostingReport.model_validate_json(raw)
+        report = ActivityReport.model_validate_json(raw)
         parse_date(report.date)
     except Exception as exc:
         raise HTTPException(status_code=400, detail="報告内容の形式が正しくありません") from exc
+    _check_report_activity_type(report)
     return report
 
 
-@app.post("/api/reports/posting/preview")
-async def preview_posting_report(
-    report: PostingReport,
+def _check_report_activity_type(report: ActivityReport):
+    if report.activity_type not in REPORT_ACTIVITY_TYPES:
+        raise HTTPException(status_code=400, detail="この画面から報告できない活動種類です")
+
+
+@app.get("/api/reports/activity/rooms")
+async def activity_report_rooms(current_user: User = Depends(get_current_user)):
+    """報告画面で選べるChatworkの投稿先"""
+    return {"rooms": chatwork_service.report_rooms(bool(current_user.is_admin))}
+
+
+@app.post("/api/reports/activity/preview")
+async def preview_activity_report(
+    report: ActivityReport,
     current_user: User = Depends(get_current_user),
 ):
     """投稿前の確認用。実際の投稿と同じ関数で本文を組み立てて返す"""
@@ -712,27 +725,26 @@ async def preview_posting_report(
         parse_date(report.date)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail="日付の形式が正しくありません") from exc
+    _check_report_activity_type(report)
     return {"message": build_message(report, current_user.username)}
 
 
-@app.post("/api/reports/posting", status_code=status.HTTP_201_CREATED)
-async def create_posting_report(
+@app.post("/api/reports/activity", status_code=status.HTTP_201_CREATED)
+async def create_activity_report(
     report: str = Form(...),
     photos: List[UploadFile] = File(default=[]),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """歩行ログ付きのポスティング報告を登録し、Chatworkに投稿する。
+    """歩行ログ付きの活動報告（ポスティング・街宣車活動）を登録し、Chatworkに投稿する。
     Chatworkへの投稿に失敗しても、活動記録の登録は成功として扱う（結果はレスポンスで返す）"""
-    if current_user.is_readonly:
-        raise HTTPException(status_code=403, detail="閲覧専用アカウントのため報告はできません")
 
-    data = _parse_posting_report(report)
+    data = _parse_activity_report(report)
     segments = clean_segments(data.segments)
     if not segments:
         raise HTTPException(status_code=400, detail="歩行ログ（ルート）がありません")
     if not data.area.strip():
-        raise HTTPException(status_code=400, detail="ポスティングエリアを入力してください")
+        raise HTTPException(status_code=400, detail="活動エリアを入力してください")
     if len(photos) > MAX_REPORT_PHOTOS:
         raise HTTPException(status_code=400, detail=f"写真は{MAX_REPORT_PHOTOS}枚までです")
 
@@ -753,7 +765,7 @@ async def create_posting_report(
     activity_date = parse_date(data.date)
     db_activity = Activity(
         user_id=current_user.id,
-        activity_type="ポスティング",
+        activity_type=data.activity_type,
         location=data.area.strip()[:255],
         location_name=None,
         latitude=track_segments[0][0][1],
@@ -774,10 +786,19 @@ async def create_posting_report(
     if map_image:
         images.append(("routeMap.jpg", map_image))
     try:
-        chatwork_result = await run_in_threadpool(chatwork_service.post_report, message, images)
+        chatwork_result = await run_in_threadpool(
+            chatwork_service.post_report_to_rooms, message, images, data.room_ids, bool(current_user.is_admin))
     except Exception as e:
         print(f"Chatwork投稿エラー: {e}")
-        chatwork_result = {"posted": False, "images_posted": 0, "skipped_reason": "投稿中にエラーが発生しました"}
+        chatwork_result = {"posted": False, "rooms": [], "skipped_reason": "投稿中にエラーが発生しました"}
+
+    # 3. Googleフォームの回答シートにも1行残す（集計用）。失敗しても登録は成功扱い
+    try:
+        sheet_result = await run_in_threadpool(
+            sheet_service.append_report, sheet_service.build_row_values(data, current_user.username))
+    except Exception as e:
+        print(f"スプレッドシート書き込みエラー: {e}")
+        sheet_result = {"saved": False, "row": None, "unmatched": [], "skipped_reason": "書き込み中にエラーが発生しました"}
 
     return {
         "message": "活動記録を登録しました",
@@ -785,6 +806,7 @@ async def create_posting_report(
         "distance_km": db_activity.distance_km,
         "map_image": bool(map_image),
         "chatwork": chatwork_result,
+        "sheet": sheet_result,
     }
 
 
@@ -802,8 +824,6 @@ async def create_activity(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    if current_user.is_readonly:
-        raise HTTPException(status_code=403, detail="閲覧専用アカウントのため記録の登録はできません")
     activity_date = datetime.fromisoformat(date)
 
     distance_km = None
@@ -889,7 +909,7 @@ def _can_edit_any_activity(user: User) -> bool:
 
 def _normalize_permissions(user: User) -> None:
     """権限の組み合わせを整える。管理者は記録編集者の権限を含むので編集者フラグは外す。
-    閲覧専用は管理者・記録編集者と両立しないので、強い権限が付いていれば閲覧専用を外す"""
+    削除不可は管理者・記録編集者と両立しないので、強い権限が付いていれば削除不可を外す"""
     if user.is_admin:
         user.is_editor = False
         user.is_readonly = False
@@ -995,7 +1015,7 @@ async def toggle_readonly_user(
         raise HTTPException(status_code=404, detail="ユーザーが見つかりません")
 
     target_user.is_readonly = not target_user.is_readonly
-    # 閲覧専用にする場合は管理者・記録編集者の権限を外す（相互排他）
+    # 削除不可にする場合は管理者・記録編集者の権限を外す（相互排他）
     if target_user.is_readonly:
         target_user.is_admin = False
         target_user.is_editor = False
@@ -1087,8 +1107,6 @@ async def update_activity(
     
     if not activity:
         raise HTTPException(status_code=404, detail="Activity not found")
-    if current_user.is_readonly:
-        raise HTTPException(status_code=403, detail="閲覧専用アカウントのため編集はできません")
     if activity.user_id != current_user.id and not _can_edit_any_activity(current_user):
         raise HTTPException(status_code=403, detail="この記録を編集する権限がありません")
     
@@ -1115,7 +1133,8 @@ async def delete_activity(
     if not activity:
         raise HTTPException(status_code=404, detail="Activity not found")
     if current_user.is_readonly:
-        raise HTTPException(status_code=403, detail="閲覧専用アカウントのため削除はできません")
+        # 削除不可アカウントは、記録の登録と自分の記録の編集はできるが、削除はできない
+        raise HTTPException(status_code=403, detail="削除不可アカウントのため削除はできません")
     if activity.user_id != current_user.id and not _can_edit_any_activity(current_user):
         raise HTTPException(status_code=403, detail="この記録を削除する権限がありません")
 

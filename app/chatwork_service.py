@@ -18,8 +18,16 @@ load_dotenv()
 
 CHATWORK_API_BASE = "https://api.chatwork.com/v2/rooms"
 CHATWORK_TOKEN = os.getenv("CHATWORK_TOKEN", "").strip()
-# 活動報告の投稿先ルーム（お試し中はテスト用ルームを指定する）
+# 報告画面で最初にチェックを入れておく投稿先ルーム（お試し中はテスト用ルームを指定する）
 CHATWORK_REPORT_ROOM_ID = os.getenv("CHATWORK_REPORT_ROOM_ID", "").strip()
+# 報告画面で選べる投稿先（GASの roomId2〜4 と同じ）。
+# guide=True のルームにだけ案内（CHATWORK_GUIDE_FOOTER）を付ける（GASの GUIDE_ROOM_IDS と同じ。支部外の方もいるチャットには出さない）
+# admin_only=True のルームは、管理者アカウントにだけ表示し、管理者だけが投稿できる
+REPORT_ROOMS = [
+    {"id": "284847688", "name": "参政党愛知第１２支部チャット", "guide": True, "admin_only": False},
+    {"id": "446130978", "name": "活動報告-藤本和美（岡崎幸田県議）チャット", "guide": False, "admin_only": False},
+    {"id": "420318628", "name": "テスト用チャット", "guide": False, "admin_only": True},
+]
 # 本文末尾に付ける案内（任意。Chatworkの囲み枠記法。改行は \n と書ける）
 CHATWORK_GUIDE_FOOTER = os.getenv("CHATWORK_GUIDE_FOOTER", "").replace("\\n", "\n")
 GEOAPIFY_API_KEY = os.getenv("GEOAPIFY_API_KEY", "").strip()
@@ -150,8 +158,23 @@ def _upload_file(room_id: str, message: str, image: Image) -> bool:
     return False
 
 
+def _allowed_rooms(is_admin: bool) -> list:
+    return [r for r in REPORT_ROOMS if is_admin or not r["admin_only"]]
+
+
+def report_rooms(is_admin: bool = False) -> list:
+    """報告画面に出す投稿先の一覧（管理者以外には admin_only のルームを出さない）。
+    default は最初からチェックを入れておくかどうか"""
+    return [{"id": r["id"], "name": r["name"], "default": r["id"] == CHATWORK_REPORT_ROOM_ID}
+            for r in _allowed_rooms(is_admin)]
+
+
+def _room(room_id: str) -> Optional[dict]:
+    return next((r for r in REPORT_ROOMS if r["id"] == room_id), None)
+
+
 def post_report(message: str, images: List[Image], room_id: Optional[str] = None) -> dict:
-    """本文と画像をChatworkに投稿する。
+    """本文と画像を1つのルームに投稿する。
     1枚目：本文＋画像、2枚目以降：画像だけ。画像がすべて失敗しても本文だけは投稿する。
     戻り値: {"posted": bool, "images_posted": int, "skipped_reason": str|None}
     """
@@ -159,7 +182,8 @@ def post_report(message: str, images: List[Image], room_id: Optional[str] = None
     if not CHATWORK_TOKEN or not room_id:
         return {"posted": False, "images_posted": 0, "skipped_reason": "Chatworkの設定（トークン・ルームID）がありません"}
 
-    if CHATWORK_GUIDE_FOOTER:
+    room = _room(room_id)
+    if CHATWORK_GUIDE_FOOTER and room and room["guide"]:
         message = message + CHATWORK_GUIDE_FOOTER
 
     pending = message
@@ -175,3 +199,23 @@ def post_report(message: str, images: List[Image], room_id: Optional[str] = None
     if pending:
         posted = _post_message(room_id, pending)
     return {"posted": posted, "images_posted": images_posted, "skipped_reason": None}
+
+
+def post_report_to_rooms(message: str, images: List[Image], room_ids: List[str], is_admin: bool = False) -> dict:
+    """選ばれた投稿先それぞれに post_report する。一覧にないルームID・管理者以外が選んだ admin_only のルームは無視する。
+    戻り値: {"posted": 1つでも投稿できたか, "rooms": [{"id","name","posted","images_posted","skipped_reason"}],
+             "skipped_reason": str|None}
+    """
+    rooms = [r for r in _allowed_rooms(is_admin) if r["id"] in set(room_ids or [])]
+    if not rooms:
+        return {"posted": False, "rooms": [], "skipped_reason": "投稿先が選ばれていません"}
+    results = []
+    for room in rooms:
+        try:
+            result = post_report(message, images, room["id"])
+        except Exception as e:
+            print(f"Chatwork投稿エラー（{room['name']}）: {e}")
+            result = {"posted": False, "images_posted": 0, "skipped_reason": "投稿中にエラーが発生しました"}
+        results.append({"id": room["id"], "name": room["name"], **result})
+    return {"posted": any(r["posted"] for r in results), "rooms": results,
+            "skipped_reason": next((r["skipped_reason"] for r in results if r["skipped_reason"]), None)}

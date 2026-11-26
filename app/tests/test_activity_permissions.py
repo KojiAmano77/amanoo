@@ -42,8 +42,12 @@ class ActivityEditPermissionTests(unittest.TestCase):
             self.update(current_user)
         self.assertEqual(ctx.exception.status_code, 403)
 
-    def test_readonly_user_cannot_edit_own_record(self):
-        self.assert_forbidden(user(OWNER_ID, is_readonly=True))
+    def test_readonly_user_can_edit_own_record(self):
+        # 削除不可（is_readonly）でも自分の記録の編集はできる（削除はできない）
+        self.assertEqual(self.update(user(OWNER_ID, is_readonly=True)).memo, "書き換え")
+
+    def test_readonly_user_cannot_edit_others_record(self):
+        self.assert_forbidden(user(99, is_readonly=True))
 
     def test_normal_user_cannot_edit_others_record(self):
         self.assert_forbidden(user(99))
@@ -58,7 +62,7 @@ class ActivityEditPermissionTests(unittest.TestCase):
         self.assertEqual(self.update(user(99, is_editor=True)).memo, "書き換え")
 
     def test_readonly_editor_flag_does_not_allow_edit(self):
-        # 万一フラグが両方立っていても、閲覧専用が優先される
+        # 万一フラグが両方立っていても、削除不可が優先される
         self.assert_forbidden(user(99, is_editor=True, is_readonly=True))
 
 
@@ -71,6 +75,14 @@ class ActivityDeletePermissionTests(unittest.TestCase):
 
     def test_editor_can_delete_others_record(self):
         self.delete(user(99, is_editor=True)).delete.assert_called_once()
+
+    def test_readonly_user_cannot_delete_own_record(self):
+        with self.assertRaises(HTTPException) as ctx:
+            self.delete(user(OWNER_ID, is_readonly=True))
+        self.assertEqual(ctx.exception.status_code, 403)
+
+    def test_normal_user_can_delete_own_record(self):
+        self.delete(user(OWNER_ID)).delete.assert_called_once()
 
     def test_normal_user_cannot_delete_others_record(self):
         with self.assertRaises(HTTPException) as ctx:

@@ -1,8 +1,8 @@
 // =====================================================================
-// 歩行ログの記録と、ポスティング報告（Chatwork投稿）
+// 歩行ログの記録と、歩行ログ付きの活動報告（ポスティング・街宣車活動。Chatwork投稿・スプレッドシート記録）
 //   ルートヒストリー＋Googleフォームの置き換え。activity.js の後に読み込む。
 //   activity.js のグローバル（map, fetchWithAuth, showMessage, currentUsername,
-//   currentUserIsReadonly, schoolDistrictData, loadActivitiesOnMap, loadMyActivities）を使う。
+//   schoolDistrictData, loadActivitiesOnMap, loadMyActivities）を使う。
 //   GPSの記録・描画・写真の縮小はすべてスマホ側で行い、サーバーには報告時に1回だけ送る。
 // =====================================================================
 (function () {
@@ -18,6 +18,8 @@
     const PHOTO_MAX_EDGE = 1600;
     const PHOTO_QUALITY = 0.8;
     const RGEO = 'https://mreversegeocoder.gsi.go.jp/reverse-geocoder/LonLatToAddress';
+    // この画面から報告できる活動種類（サーバーの activity_report.REPORT_ACTIVITY_TYPES と同じ）
+    const REPORT_TYPES = ['ポスティング', '街宣車活動'];
     const BILLS = [
         ['ito', '伊藤議員 市政報告ビラ'],
         ['kanda', '神田議員 市政報告ビラ'],
@@ -264,8 +266,7 @@
         updatePocket(); // 記録が止まったら画面OFFモードも自動で解除する
         if (!panel) return;
         const fullscreen = document.getElementById('map').classList.contains('map-fullscreen');
-        const readonly = typeof currentUserIsReadonly !== 'undefined' && currentUserIsReadonly;
-        const visible = !readonly && (fullscreen || state.status !== 'idle');
+        const visible = fullscreen || state.status !== 'idle';
         panel.style.display = visible ? '' : 'none';
         if (!visible) return;
 
@@ -383,10 +384,12 @@
     }
 
     // ---------- 報告フォーム ----------
-    let reportSource = null;   // { segments }
+    // kind: 'record'（この画面で歩いた記録）| 'gpx'（地図タブの「GPX読込」で読んだファイル）
+    let reportSource = null;   // { segments, kind, fileName }
 
-    function openReportForm(segments) {
-        reportSource = { segments };
+    function openReportForm(segments, kind = 'record', fileName = '', activityType = 'ポスティング') {
+        if (!REPORT_TYPES.includes(activityType)) activityType = REPORT_TYPES[0];
+        reportSource = { segments, kind, fileName };
         reportPhotos.forEach(p => URL.revokeObjectURL(p.url));
         reportPhotos = [];
         const pts = allPoints(segments);
@@ -400,32 +403,41 @@
             <input type="number" inputmode="numeric" min="0" step="1" data-bill="${key}" placeholder="0"> 枚</div>`).join('');
 
         const box = openModal(`
-            <h3 class="modal-title">📝 ポスティング報告</h3>
+            <h3 class="modal-title">📝 ポスティング/街宣車活動 活動報告</h3>
             <div class="modal-form rr-form">
+                ${kind === 'gpx' ? `<p class="rr-sub">📂 ${esc(fileName || 'GPXファイル')}<br>
+                    この画面で報告できるのは${REPORT_TYPES.join('・')}です。ほかの活動のGPXは「戻る」を押して、地図タブで活動種別を選んで「記録する」から登録してください</p>` : ''}
+                <div class="modal-field"><label>活動種類 <span class="required-mark">*</span></label>
+                    <div class="rr-types">${REPORT_TYPES.map(t => `
+                        <label class="rr-room"><input type="radio" name="rr-type" value="${esc(t)}" ${t === activityType ? 'checked' : ''}>
+                        ${esc(t)}</label>`).join('')}</div></div>
                 <p class="rr-summary">距離 ${totalKm(segments).toFixed(2)}km ／ 投稿者：${esc(currentUsername || '')}</p>
                 <div class="rr-row">
                     <div class="modal-field"><label>日付</label><input type="date" id="rr-date" value="${ymd(first)}"></div>
                     <div class="modal-field"><label>開始</label><input type="time" id="rr-start" value="${hhmm(first)}"></div>
                     <div class="modal-field"><label>終了</label><input type="time" id="rr-end" value="${hhmm(last)}"></div>
                 </div>
-                <div class="modal-field"><label>ポスティングエリア <span class="required-mark">*</span></label>
+                <div class="modal-field"><label>活動エリア <span class="required-mark">*</span></label>
                     <input type="text" id="rr-area" placeholder="住所を取得中…"></div>
-                <div class="modal-field"><label>小学校学区</label>
+                <!-- ここから下の2項目はポスティングのときだけ表示する -->
+                <div class="modal-field" data-only="ポスティング"><label>小学校学区</label>
                     <input type="text" id="rr-school" placeholder="学区を判定中…"></div>
-                <div class="modal-field"><label>ポスティング枚数</label>${billInputs}
+                <div class="modal-field" data-only="ポスティング"><label>ポスティング枚数</label>${billInputs}
                     <div class="rr-bill"><label>うち手渡し</label>
                     <input type="number" inputmode="numeric" min="0" step="1" id="rr-tewatashi" placeholder="0"> 枚</div></div>
                 <div class="rr-row">
                     <div class="modal-field rr-grow"><label>参加者（投稿者以外）</label>
                         <input type="text" id="rr-participants" placeholder="例：山田、佐藤"></div>
-                    <div class="modal-field"><label>参加人数合計</label>
-                        <input type="number" inputmode="numeric" min="1" id="rr-people" placeholder="1"></div>
+                    <div class="modal-field"><label>参加人数合計（あなたも含む）</label>
+                        <input type="number" inputmode="numeric" min="1" id="rr-people" placeholder="例：2"></div>
                 </div>
                 <div class="modal-field"><label>活動報告</label>
                     <textarea id="rr-report" rows="3" placeholder="気づいたこと、反応など"></textarea></div>
                 <div class="modal-field"><label>写真（${MAX_PHOTOS}枚まで）</label>
                     <input type="file" id="rr-photos" accept="image/*" multiple>
                     <div id="rr-photo-list" class="rr-photo-list"></div></div>
+                <div class="modal-field"><label>Chatworkの投稿先 <span class="required-mark">*</span></label>
+                    <div id="rr-rooms" class="rr-rooms">読み込み中…</div></div>
             </div>
             <div class="modal-actions">
                 <button class="modal-cancel-btn" data-act="cancel">戻る</button>
@@ -433,6 +445,8 @@
             </div>`);
 
         box.querySelector('#rr-photos').addEventListener('change', onPhotosSelected);
+        box.querySelectorAll('input[name="rr-type"]').forEach(el => el.addEventListener('change', updateTypeFields));
+        updateTypeFields();
         box.addEventListener('click', (e) => {
             const act = e.target.dataset.act;
             if (act === 'cancel') closeModal();
@@ -447,6 +461,60 @@
 
         fillArea(segments);
         fillSchool(segments);
+        fillRooms();
+    }
+
+    function selectedType() {
+        const el = document.querySelector('#rr-modal input[name="rr-type"]:checked');
+        return el ? el.value : REPORT_TYPES[0];
+    }
+
+    // 活動種類に関係ない項目（ビラ枚数・学区）を隠す
+    function updateTypeFields() {
+        const type = selectedType();
+        document.querySelectorAll('#rr-modal [data-only]').forEach(el => {
+            el.style.display = el.dataset.only === type ? '' : 'none';
+        });
+    }
+
+    // ---------- Chatworkの投稿先 ----------
+    const ROOMS_KEY = 'routeRecorder.rooms';
+    let reportRooms = [];
+
+    function loadRoomChoice() {
+        try { const v = JSON.parse(localStorage.getItem(ROOMS_KEY)); return Array.isArray(v) ? v : null; }
+        catch (e) { return null; }
+    }
+    function saveRoomChoice(ids) {
+        try { localStorage.setItem(ROOMS_KEY, JSON.stringify(ids)); } catch (e) { /* 保存できなくても投稿はできる */ }
+    }
+
+    async function fillRooms() {
+        const box = document.getElementById('rr-rooms');
+        try {
+            const res = await fetchWithAuth('/api/reports/activity/rooms');
+            if (!res.ok) throw new Error();
+            reportRooms = (await res.json()).rooms || [];
+        } catch (err) {
+            if (box) box.textContent = '投稿先を読み込めませんでした。画面を開き直してください';
+            return;
+        }
+        if (!box) return;
+        // 前回この端末で選んだ投稿先を引き継ぐ。初めてのときはサーバーの既定（お試し中はテスト用チャット）
+        const saved = loadRoomChoice();
+        const ids = reportRooms.map(r => r.id);
+        const checked = saved ? saved.filter(id => ids.includes(id)) : reportRooms.filter(r => r.default).map(r => r.id);
+        box.innerHTML = reportRooms.map(r => `
+            <label class="rr-room"><input type="checkbox" value="${esc(r.id)}" ${checked.includes(r.id) ? 'checked' : ''}>
+            ${esc(r.name)}</label>`).join('');
+    }
+
+    function selectedRooms() {
+        return Array.from(document.querySelectorAll('#rr-rooms input:checked')).map(el => el.value);
+    }
+    function roomName(id) {
+        const r = reportRooms.find(x => x.id === id);
+        return r ? r.name : id;
     }
 
     // ルート上の数点で住所を調べ、町名をまとめる（国土地理院の逆ジオコーダ。where.html と同じ）
@@ -548,22 +616,28 @@
     function collectReport() {
         const val = id => (document.getElementById(id).value || '').trim();
         const num = id => { const v = parseInt(val(id), 10); return isNaN(v) ? null : v; };
+        const type = selectedType();
+        const posting = type === 'ポスティング';
         const bills = {};
-        document.querySelectorAll('#rr-modal [data-bill]').forEach(el => {
-            const v = parseInt(el.value, 10);
-            if (!isNaN(v) && v > 0) bills[el.dataset.bill] = v;
-        });
+        if (posting) {
+            document.querySelectorAll('#rr-modal [data-bill]').forEach(el => {
+                const v = parseInt(el.value, 10);
+                if (!isNaN(v) && v > 0) bills[el.dataset.bill] = v;
+            });
+        }
         return {
+            activity_type: type,
             date: val('rr-date'),
             start_time: val('rr-start'),
             end_time: val('rr-end'),
             participants: val('rr-participants'),
             total_people: num('rr-people'),
             bills,
-            tewatashi: num('rr-tewatashi'),
+            tewatashi: posting ? num('rr-tewatashi') : null,
             area: val('rr-area'),
-            school: val('rr-school'),
+            school: posting ? val('rr-school') : '',
             report_text: val('rr-report'),
+            room_ids: selectedRooms(),
         };
     }
 
@@ -572,12 +646,13 @@
     async function showPreview() {
         const report = collectReport();
         if (!report.date) { alert('日付を入力してください'); return; }
-        if (!report.area) { alert('ポスティングエリアを入力してください'); return; }
+        if (!report.area) { alert('活動エリアを入力してください'); return; }
+        if (!report.room_ids.length) { alert('Chatworkの投稿先を1つ以上選んでください'); return; }
         const modal = document.getElementById('rr-modal');
         const formBox = modal.querySelector('.rr-modal-box');
         let message;
         try {
-            const res = await fetchWithAuth('/api/reports/posting/preview', {
+            const res = await fetchWithAuth('/api/reports/activity/preview', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(report),
@@ -598,6 +673,7 @@
         prev.innerHTML = `
             <h3 class="modal-title">Chatworkに投稿する内容</h3>
             <pre class="rr-preview-text">${esc(message)}</pre>
+            <p class="rr-sub">投稿先：${esc(report.room_ids.map(roomName).join('、'))}</p>
             <p class="rr-sub">画像：写真${reportPhotos.length}枚＋ルート地図</p>
             <div class="modal-actions">
                 <button class="modal-cancel-btn" data-act="back">◀ 修正</button>
@@ -618,23 +694,36 @@
         fd.append('report', JSON.stringify({ ...pendingReport, segments }));
         reportPhotos.forEach((p, i) => fd.append('photos', p.blob, `photo${i + 1}.jpg`));
         try {
-            const res = await fetchWithAuth('/api/reports/posting', { method: 'POST', body: fd });
+            const res = await fetchWithAuth('/api/reports/activity', { method: 'POST', body: fd });
             const data = await res.json().catch(() => ({}));
             if (!res.ok) throw new Error(data.detail || `送信に失敗しました（${res.status}）`);
 
+            saveRoomChoice(pendingReport.room_ids);
             const cw = data.chatwork || {};
-            const cwText = cw.posted
-                ? `Chatworkに投稿しました（画像${cw.images_posted}枚）`
+            const cwRooms = cw.rooms || [];
+            const cwText = cwRooms.length
+                ? cwRooms.map(r => r.posted
+                    ? `Chatwork「${r.name}」に投稿しました（画像${r.images_posted}枚）`
+                    : `※Chatwork「${r.name}」には投稿できませんでした${r.skipped_reason ? '：' + r.skipped_reason : ''}`).join('\n')
                 : `※Chatworkには投稿できませんでした${cw.skipped_reason ? '：' + cw.skipped_reason : ''}`;
-            alert(`活動記録を登録しました（${data.distance_km ?? '-'}km）\n${cwText}`);
+            const sh = data.sheet || {};
+            const shText = sh.saved
+                ? 'スプレッドシートに記録しました'
+                : `※スプレッドシートには記録できませんでした${sh.skipped_reason ? '：' + sh.skipped_reason : ''}`;
+            alert(`活動記録を登録しました（${data.distance_km ?? '-'}km）\n${cwText}\n${shText}`);
 
             closeModal();
             reportPhotos.forEach(p => URL.revokeObjectURL(p.url));
             reportPhotos = [];
-            state = { status: 'idle', segments: [], startedAt: null };
-            save(true);
-            clearTrack();
-            updatePanel();
+            if (reportSource.kind === 'gpx') {
+                // 読み込んだ軌跡と地図タブの入力欄を片付ける（歩行記録の途中データには触らない）
+                if (typeof clearGpxTrack === 'function') clearGpxTrack();
+            } else {
+                state = { status: 'idle', segments: [], startedAt: null };
+                save(true);
+                clearTrack();
+                updatePanel();
+            }
             if (typeof loadActivitiesOnMap === 'function') loadActivitiesOnMap();
             if (typeof loadMyActivities === 'function') loadMyActivities();
         } catch (err) {
@@ -659,6 +748,14 @@
         }
     });
     window.addEventListener('pagehide', () => save(true));
+
+    // 地図タブの「GPX読込」から報告画面を開く（activity.js の handleGpxUpload から呼ぶ）。
+    // 地図タブの活動種別で街宣車活動などを選んでいれば、それを最初から選んでおく
+    window.openActivityReportFromGpx = function (segments, fileName) {
+        const typeSelect = document.getElementById('activity-type');
+        openReportForm(segments, 'gpx', fileName, typeSelect ? typeSelect.value : '');
+        return true;
+    };
     document.addEventListener('mapfullscreenchange', updatePanel);
 
     document.addEventListener('DOMContentLoaded', () => {
@@ -674,7 +771,5 @@
             openStopDialog(true);
         }
         updatePanel();
-        // 閲覧専用かどうかはユーザー情報の取得後に分かるので、少し後にもう一度反映する
-        setTimeout(updatePanel, 1500);
     });
 })();

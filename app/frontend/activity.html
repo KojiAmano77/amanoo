@@ -7,7 +7,7 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" integrity="sha384-5e2ESR8Ycmos6g3gAKr1Jvwye8sW4U1u/cAKulfVJnkakCcMqhOudbtPnvJ+nbv7" crossorigin="anonymous" />
-    <link rel="stylesheet" href="/static/css/activity.css?v=10">
+    <link rel="stylesheet" href="/static/css/activity.css?v=13">
 </head>
 <body>
     <div class="container">
@@ -108,8 +108,8 @@
             <div id="map-view">
                 <div class="map-header">
                     <h2>エリアを描画して記録作成</h2>
+                    <button class="gpx-upload-btn" onclick="document.getElementById('gpx-file-input').click()">📝 ルートログをGPXファイルから登録</button>
                     <button id="current-location-btn" class="current-location-btn" onclick="moveToCurrentLocation()">📍現在地へ</button>
-                    <button class="gpx-upload-btn" onclick="document.getElementById('gpx-file-input').click()">📂 GPX読込</button>
                     <input type="file" id="gpx-file-input" accept=".gpx" style="display:none" onchange="handleGpxUpload(event)">
                     <button id="gpx-clear-btn" class="gpx-clear-btn hidden" onclick="clearGpxTrack()">✕ 軌跡消去</button>
                     <button id="pin-mode-btn" class="gpx-upload-btn" onclick="togglePinMode()">📌 地点登録</button>
@@ -313,7 +313,7 @@
                         </label>
                         <label class="checkbox-label">
                             <input type="checkbox" id="user-modal-is-readonly"
-                                onchange="onPermissionChange('readonly')"> 閲覧専用
+                                onchange="onPermissionChange('readonly')"> 削除不可
                         </label>
                     </div>
                 </div>
@@ -329,7 +329,7 @@
     <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
     <script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
     <script src="https://maps.gsi.go.jp/js/muni.js"></script>
-    <script src="/static/js/activity.js?v=45"></script>
-    <script src="/static/js/route-recorder.js?v=5"></script>
+    <script src="/static/js/activity.js?v=49"></script>
+    <script src="/static/js/route-recorder.js?v=13"></script>
 </body>
 </html>
